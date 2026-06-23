@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Calculadora Forecast GAV - 3.1 Gastos y Sueldos del Personal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy:#0f2b46; --teal:#0e7c86; --teal-light:#e6f4f5; --amber:#c97b16;
+    --bg:#f4f6f8; --card:#ffffff; --border:#dde3e8; --text:#1c2b36; --muted:#6b7a85;
+    --real:#eef3f7; --proj:#fff7ea; --bad:#c0392b; --good:#1e8449;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13.5px;}
+  header{background:var(--navy);color:#fff;padding:18px 28px;}
+  header h1{margin:0;font-size:19px;font-weight:600;}
+  header p{margin:4px 0 0;font-size:12.5px;color:#b9c9d4;}
+  .tabs{display:flex;gap:2px;background:#fff;border-bottom:1px solid var(--border);padding:0 20px;flex-wrap:wrap;position:sticky;top:0;z-index:50;}
+  .tab{padding:11px 16px;cursor:pointer;font-size:13px;color:var(--muted);border-bottom:3px solid transparent;font-weight:600;}
+  .tab.active{color:var(--navy);border-bottom-color:var(--teal);}
+  main{padding:20px 24px 60px;max-width:1500px;margin:0 auto;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:18px;}
+  .card h2{margin:0 0 4px;font-size:15px;color:var(--navy);}
+  .card .sub{margin:0 0 14px;color:var(--muted);font-size:12px;}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  th,td{border:1px solid var(--border);padding:5px 7px;text-align:right;white-space:nowrap;}
+  th{background:#f0f3f5;color:var(--navy);font-weight:600;position:sticky;top:0;z-index:2;}
+  td.lbl,th.lbl{text-align:left;white-space:normal;min-width:170px;}
+  td.frozen1,th.frozen1{position:sticky;left:0;width:180px;min-width:180px;max-width:180px;z-index:3;background:#fff;box-shadow:2px 0 0 0 var(--border);}
+  td.frozen2,th.frozen2{position:sticky;left:180px;width:160px;min-width:160px;max-width:160px;z-index:3;background:#fff;box-shadow:2px 0 0 0 var(--border);}
+  th.frozen1,th.frozen2{z-index:8;background:#f0f3f5;}
+  tr.totalrow td.frozen1, tr.totalrow td.frozen2{background:#eef6f6;}
+  tr.grandrow td.frozen1, tr.grandrow td.frozen2{background:var(--navy);color:#fff;}
+  td input, td select{width:90px;border:1px solid transparent;background:transparent;text-align:right;font-size:12.5px;padding:3px;border-radius:3px;}
+  td input:focus, td select:focus{border-color:var(--teal);background:#fff;}
+  td.real{background:var(--real);}
+  td.proj{background:var(--proj);}
+  .tableWrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;}
+  .row-flex{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11.5px;color:var(--muted);font-weight:600;}
+  .field input, .field select{padding:7px 9px;border:1px solid var(--border);border-radius:5px;font-size:13px;min-width:140px;}
+  button{background:var(--teal);color:#fff;border:none;padding:8px 14px;border-radius:5px;font-size:12.5px;cursor:pointer;font-weight:600;}
+  button.secondary{background:#fff;color:var(--teal);border:1px solid var(--teal);}
+  button.danger{background:#fff;color:var(--bad);border:1px solid var(--bad);padding:4px 9px;font-size:11.5px;}
+  button.small{padding:4px 9px;font-size:11.5px;}
+  button:hover{opacity:.88;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;}
+  .pill.fijo{background:#e8eef2;color:var(--navy);}
+  .pill.variable{background:#fdebd6;color:var(--amber);}
+  .badge-info{background:var(--teal-light);border-left:3px solid var(--teal);padding:8px 12px;border-radius:4px;font-size:12px;color:#0a4a51;margin-bottom:12px;}
+  .totalrow td{font-weight:700;background:#eef6f6;}
+  .grandrow td{font-weight:800;background:var(--navy);color:#fff;}
+  .kpis{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .kpi{flex:1;min-width:180px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+  .kpi .v{font-size:21px;font-weight:800;color:var(--navy);}
+  .kpi .l{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .kpi .d{font-size:11px;margin-top:4px;font-weight:700;}
+  .d.up{color:var(--bad);} .d.down{color:var(--good);}
+  td.ppto{background:#eef0fb;}
+  td.varcell.over{color:var(--bad);font-weight:700;}
+  td.varcell.under{color:var(--good);font-weight:700;}
+  .filebtn{display:inline-block;background:#fff;border:1px dashed var(--teal);color:var(--teal);padding:9px 14px;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;}
+  .filebtn input{display:none;}
+  .note{font-size:11.5px;color:var(--muted);line-height:1.5;}
+  .chart-wrap{width:100%;overflow-x:auto;}
+  .legend{display:flex;gap:16px;font-size:11.5px;margin-top:6px;flex-wrap:wrap;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  .status-msg{font-size:12px;padding:8px 10px;border-radius:5px;margin-top:8px;}
+  .status-ok{background:#eafaf1;color:var(--good);}
+  .status-err{background:#fdecea;color:var(--bad);}
+  .toggle-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .mini{font-size:11px;color:var(--muted);}
+  hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Calculadora Forecast 2026 &mdash; GAV 3.1 Gastos y Sueldos del Personal</h1>
+  <p>Proyección de cierre de año a partir de información real Ene&ndash;May 2026 y libro de remuneraciones</p>
+</header>
+
+<div class="tabs" id="tabs">
+  <div class="tab active" data-tab="historico">1. Histórico por cuenta</div>
+  <div class="tab" data-tab="libro">2. Libro de remuneraciones</div>
+  <div class="tab" data-tab="personal">3. Movimientos de personal</div>
+  <div class="tab" data-tab="parametros">4. Ventas y parámetros</div>
+  <div class="tab" data-tab="forecast">5. Forecast 2026</div>
+</div>
+
+<main>
+
+<!-- ============ PANEL 1: HISTORICO ============ -->
+<div class="panel active" id="panel-historico">
+  <div class="card">
+    <h2>Cuentas del grupo 3.1 y valores mensuales</h2>
+    <p class="sub">Carga un Excel/CSV con el detalle por cuenta contable, o edita directamente la tabla. Columnas esperadas: Cuenta contable, Cuenta, Clasificación, Fijo/Variable, y una columna por mes (Ene, Feb, Mar...). Los meses editables (reales) se definen con el selector "Mes desde el cual proyectar" de la pestaña 4: cuando cierres un nuevo mes (ej. Junio), muévelo ahí y se habilita la columna aquí automáticamente.</p>
+    <div class="row-flex" style="margin-bottom:14px;">
+      <label class="filebtn">Cargar Excel/CSV histórico
+        <input type="file" id="fileHistorico" accept=".xlsx,.xls,.csv">
+      </label>
+      <button class="secondary small" onclick="addAccountRow()">+ Agregar cuenta</button>
+      <button class="secondary small" onclick="resetAccountsDefault()">Restaurar 12 cuentas estándar</button>
+      <span id="histStatus" class="mini"></span>
+    </div>
+    <div class="card" id="mappingPanel" style="display:none;background:var(--teal-light);border-color:var(--teal);">
+      <h2 style="margin-bottom:10px;">Confirma qué columna de tu archivo corresponde a cada dato</h2>
+      <p class="sub">No siempre se detectan los encabezados automáticamente. Revisa o corrige cada selección y luego presiona "Aplicar carga".</p>
+      <div id="mappingFields" class="row-flex"></div>
+      <div style="margin-top:12px;">
+        <button onclick="applyHistMapping()">Aplicar carga</button>
+        <button class="secondary" onclick="cancelHistMapping()">Cancelar</button>
+      </div>
+    </div>
+    <div class="tableWrap">
+      <table id="tblHistorico"></table>
+    </div>
+    <p class="note" style="margin-top:10px;">Celdas con fondo gris claro = mes real (editable). Las columnas se generan dinámicamente para los 12 meses; ingresa valores reales solo hasta el último mes cerrado (mayo). El resto se calculará en la pestaña Forecast.</p>
+  </div>
+</div>
+
+<!-- ============ PANEL 2: LIBRO REMUNERACIONES ============ -->
+<div class="panel" id="panel-libro">
+  <div class="card">
+    <h2>Libro de remuneraciones (último mes cerrado)</h2>
+    <p class="sub">Carga siempre el libro del último mes cerrado. Se usa como línea base de dotación para proyectar Remuneraciones, Horas Extras, Gratificaciones y las cargas patronales adicionales. Al indicar qué mes representa, esa info se considera real/cerrada y el resto del sistema (pestaña 1 y 4) se actualiza para proyectar desde el mes siguiente.</p>
+    <div class="row-flex">
+      <label class="filebtn">Cargar libro de remuneraciones (.xlsx)
+        <input type="file" id="filePayroll" accept=".xlsx,.xls,.csv">
+      </label>
+      <div class="field">
+        <label>Mes que representa este libro</label>
+        <select id="payrollMonth"></select>
+      </div>
+    </div>
+    <div id="payrollStatus"></div>
+  </div>
+
+  <div class="card" id="payrollSummaryCard" style="display:none;">
+    <h2>Resumen de dotación cargada</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="kpiHeadcount">-</div><div class="l">Trabajadores en el libro</div></div>
+      <div class="kpi"><div class="v" id="kpiSueldoBase">-</div><div class="l">Bolsón Remuneraciones (base+fijos)</div></div>
+      <div class="kpi"><div class="v" id="kpiHorasExtras">-</div><div class="l">Horas extras del mes</div></div>
+      <div class="kpi"><div class="v" id="kpiGratif">-</div><div class="l">Gratificaciones del mes</div></div>
+      <div class="kpi"><div class="v" id="kpiBasePrevision">-</div><div class="l">Base imponible previsión (total)</div></div>
+      <div class="kpi"><div class="v" id="kpiBaseCesantia">-</div><div class="l">Base imponible cesantía (total)</div></div>
+    </div>
+    <p class="note">Mapeo de columnas usado &mdash; Remuneraciones: Sueldo base + Asignación familiar + Recargo domingo + Diferencia de sueldo + Dif. asignación celular + Asig. gastos celular + Días adicionales + Subsidio licencia médica. Horas Extras: columna Horas Extras. Gratificaciones: A/Gratificación + A/Gratificación líquida + Gratificación mensual. Si tu libro usa otros nombres de columnas, revisa que los encabezados coincidan (no distingue mayúsculas/tildes).</p>
+    <div class="tableWrap" style="max-height:280px;overflow-y:auto;">
+      <table id="tblPayrollPreview"></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Ajuste de gratificación legal (devengo vs. anticipo del libro)</h2>
+    <p class="sub">El libro de remuneraciones solo trae el anticipo mensual de gratificación (columnas A/Gratificación, A/Gratificación líquida, Gratificación mensual). Como el pago real se liquida cada enero del año siguiente, el gasto contable mensual completo es mayor: anticipo del libro + un excedente fijo para llegar al devengo anual/12.</p>
+    <div class="row-flex">
+      <div class="field">
+        <label>Gratificación legal anual estimada (toda la empresa)</label>
+        <input type="text" id="gratAnualInput" placeholder="Ej: 720.000.000">
+      </div>
+      <button class="secondary" onclick="recalcGratSuggested()">Sugerir desde histórico (prom. x 12)</button>
+      <div class="toggle-row" style="margin:0;">
+        <input type="checkbox" id="gratAjusteActivo" checked>
+        <label for="gratAjusteActivo" class="mini">Aplicar excedente fijo en la proyección de Gratificaciones</label>
+      </div>
+    </div>
+    <div id="gratStatus"></div>
+    <div class="kpis" style="margin-top:12px;">
+      <div class="kpi"><div class="v" id="kpiGratAnualMes">-</div><div class="l">Devengo mensual objetivo (anual/12)</div></div>
+      <div class="kpi"><div class="v" id="kpiGratLibroBase">-</div><div class="l">Anticipo según libro cargado</div></div>
+      <div class="kpi"><div class="v" id="kpiGratDeltaFijo">-</div><div class="l">Excedente fijo aplicado cada mes</div></div>
+    </div>
+    <p class="note">El excedente se calcula una sola vez (objetivo mensual menos el anticipo del libro cargado) y se suma cada mes proyectado de Gratificaciones, además del anticipo que varía con altas/bajas.</p>
+  </div>
+</div>
+
+<!-- ============ PANEL 3: MOVIMIENTOS PERSONAL ============ -->
+<div class="panel" id="panel-personal">
+  <div class="card">
+    <h2>Nuevos ingresos (altas) proyectados</h2>
+    <p class="sub">Cada ingreso se prorratea automáticamente desde su fecha de ingreso (base 30 días) y se suma a la dotación a partir de ese mes.</p>
+    <div class="tableWrap"><table id="tblAltas"></table></div>
+    <button class="secondary small" style="margin-top:10px;" onclick="addAlta()">+ Agregar ingreso</button>
+  </div>
+
+  <div class="card">
+    <h2>Desvinculaciones (bajas) proyectadas</h2>
+    <p class="sub">Selecciona a la persona desde el libro cargado (autocompleta sueldo y bases imponibles) o ingrésala manualmente. El mes de salida se prorratea y se remueve por completo desde el mes siguiente.</p>
+    <div class="tableWrap"><table id="tblBajas"></table></div>
+    <button class="secondary small" style="margin-top:10px;" onclick="addBaja()">+ Agregar salida</button>
+    <hr class="sep">
+    <p class="note"><b>Cálculo de indemnización sugerido</b> (editable manualmente en la columna "Monto indemnización"): si el tipo de salida es "Despido", se sugiere 1 sueldo base por año de servicio (tope 11 años) según años calculados entre fecha de ingreso y fecha de salida, más 1 sueldo si no hay aviso previo. Para "Renuncia" o "Mutuo acuerdo" se sugiere solo el pago de vacaciones proporcionales que indiques. Ajusta libremente el monto final.</p>
+  </div>
+</div>
+
+<!-- ============ PANEL 4: VENTAS Y PARAMETROS ============ -->
+<div class="panel" id="panel-parametros">
+  <div class="card">
+    <h2>Ventas mensuales 2026</h2>
+    <p class="sub">Las ventas reales (Ene&ndash;mes cerrado) se usan para calcular la tasa histórica de los conceptos variables (Comisiones, Bonos y premios). Las ventas proyectadas alimentan el forecast desde el mes de inicio de proyección.</p>
+    <div class="tableWrap"><table id="tblVentas"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Mes desde el cual proyectar</h2>
+    <div class="row-flex">
+      <div class="field">
+        <label>Proyectar desde</label>
+        <select id="startMonth"></select>
+      </div>
+      <p class="note" style="margin:0;max-width:480px;">Los meses anteriores a este se muestran con su valor REAL ingresado en las tablas. Desde este mes (incluido) en adelante, todos los valores se calculan con el motor de forecast.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Cargas adicionales patronales (sobre remuneraciones)</h2>
+    <p class="sub">Tasas legales referenciales en Chile, editables. Se aplican sobre las bases imponibles del libro de remuneraciones ajustadas por altas/bajas.</p>
+    <div class="row-flex">
+      <div class="field"><label>SIS - Seguro Invalidez y Sobrevivencia (%)</label><input type="number" step="0.01" id="rateSIS" value="1.88"></div>
+      <div class="field"><label>Mutual / Seguro accidentes del trabajo (%)</label><input type="number" step="0.01" id="rateMutual" value="0.95"></div>
+      <div class="field"><label>AFC Empleador - Seguro cesantía (%)</label><input type="number" step="0.01" id="rateAFC" value="2.40"></div>
+      <div class="toggle-row" style="margin-top:6px;width:100%;">
+        <input type="checkbox" id="includeCargas" checked>
+        <label for="includeCargas" class="mini">Incluir cargas adicionales patronales en el Total General del forecast</label>
+      </div>
+      <div class="toggle-row" style="width:100%;">
+        <input type="checkbox" id="includeGratifAltas" checked>
+        <label for="includeGratifAltas" class="mini">Estimar gratificación legal (25% del sueldo base) para nuevos ingresos</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Método de proyección por cuenta (conceptos fijos no asociados a dotación)</h2>
+    <p class="sub">Aplica a cuentas Fijas que no son Remuneraciones/Horas Extras/Gratificaciones (las cuales se calculan vía dotación) ni Comisiones/Bonos (las cuales usan razón sobre ventas).</p>
+    <div class="tableWrap"><table id="tblMetodos"></table></div>
+  </div>
+</div>
+
+<!-- ============ PANEL 5: FORECAST ============ -->
+<div class="panel" id="panel-forecast">
+  <div class="card">
+    <div class="kpis" id="forecastKpis"></div>
+    <div class="badge-info" id="forecastNote"></div>
+    <div class="tableWrap">
+      <table id="tblForecast"></table>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--real);border:1px solid var(--border);"></i>Mes real</span>
+      <span><i style="background:var(--proj);border:1px solid var(--border);"></i>Mes proyectado</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Evolución mensual del gasto total (3.1)</h2>
+    <p class="sub" id="chartSub">El gasto mensual se compara contra el presupuesto mensual real. Ingresa el presupuesto mes a mes en la fila "Presupuesto mensual (grupo 3.1)" de la tabla de arriba para activar la comparación.</p>
+    <div class="chart-wrap"><svg id="chartSvg" width="100%" height="300"></svg></div>
+    <div class="legend" id="chartLegend">
+      <span><i style="background:#9fb7c4;"></i>Mes real</span>
+      <span><i style="background:#0e7c86;"></i>Mes proyectado</span>
+      <span><i style="background:none;border-top:2px dashed #c0392b;height:0;width:14px;"></i>Presupuesto mensual (ref.)</span>
+      <span style="color:var(--bad);font-weight:700;">▲ En contra del ppto.</span>
+      <span style="color:var(--good);font-weight:700;">▼ A favor del ppto.</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Exportar / respaldar datos</h2>
+    <div class="row-flex">
+      <button onclick="exportState()">Descargar respaldo (JSON)</button>
+      <label class="filebtn secondary">Importar respaldo (JSON)<input type="file" id="fileImport" accept=".json"></label>
+      <button class="secondary" onclick="exportForecastCSV()">Exportar forecast a CSV</button>
+    </div>
+    <p class="note" style="margin-top:8px;">Los datos se guardan automáticamente en este navegador (localStorage). Usa el respaldo JSON para moverlos a otro computador o conservarlos a salvo.</p>
+  </div>
+</div>
+
+</main>
+
+<script>
+/* ============================================================
+   MODELO DE DATOS
+   ============================================================ */
+const MONTHS = [
+  {key:'ene',label:'Ene-26',num:1},{key:'feb',label:'Feb-26',num:2},{key:'mar',label:'Mar-26',num:3},
+  {key:'abr',label:'Abr-26',num:4},{key:'may',label:'May-26',num:5},{key:'jun',label:'Jun-26',num:6},
+  {key:'jul',label:'Jul-26',num:7},{key:'ago',label:'Ago-26',num:8},{key:'sep',label:'Sep-26',num:9},
+  {key:'oct',label:'Oct-26',num:10},{key:'nov',label:'Nov-26',num:11},{key:'dic',label:'Dic-26',num:12}
+];
+const DAYS2026 = {1:31,2:28,3:31,4:30,5:31,6:30,7:31,8:31,9:30,10:31,11:30,12:31};
+
+const DEFAULT_ACCOUNTS = [
+  {codigo:'610101001',cuenta:'Remuneraciones',clasif:'a. Remuneraciones',variable:false,driver:'dotacion_remun'},
+  {codigo:'610101002',cuenta:'Horas extras',clasif:'a. Remuneraciones',variable:false,driver:'dotacion_he'},
+  {codigo:'610101003',cuenta:'Gratificaciones',clasif:'a. Remuneraciones',variable:false,driver:'dotacion_grat'},
+  {codigo:'610102001',cuenta:'Comisiones de ventas',clasif:'b. Comisiones',variable:true,driver:'ventas'},
+  {codigo:'610103001',cuenta:'Indemnizaciones, compensaciones',clasif:'f. Indemnizaciones',variable:false,driver:'indemnizaciones'},
+  {codigo:'610104001',cuenta:'Vacaciones',clasif:'g. Vacaciones',variable:false,driver:'tendencia'},
+  {codigo:'610105001',cuenta:'Bonos y premios',clasif:'c. Bonos y premios',variable:true,driver:'ventas'},
+  {codigo:'610106001',cuenta:'Bonos de desempeño',clasif:'h. Bonos de desempeño',variable:false,driver:'tendencia'},
+  {codigo:'610107001',cuenta:'Honorarios',clasif:'e. Honorarios',variable:false,driver:'tendencia'},
+  {codigo:'610108001',cuenta:'Capacitaciones',clasif:'d. Gastos del personal',variable:false,driver:'tendencia'},
+  {codigo:'610108002',cuenta:'Gastos casino/colacion',clasif:'d. Gastos del personal',variable:false,driver:'tendencia'},
+  {codigo:'610108003',cuenta:'Otros gastos del personal',clasif:'d. Gastos del personal',variable:false,driver:'tendencia'}
+];
+
+function emptyMonthObj(){ let o={}; MONTHS.forEach(m=>o[m.key]=null); return o; }
+
+// Deriva driver y variable/fijo a partir de la letra de Clasificacion (a-h), independiente del codigo de cuenta.
+// Reglas de negocio: a=dotacion (remun/horas extras/gratificaciones segun nombre), b y c = variable segun ventas,
+// f = indemnizaciones (tendencia + bajas), resto (d,e,g,h) = tendencia fija.
+function deriveDriverFromClasif(clasif, cuentaNombre){
+  const c = normalizeHeader(clasif);
+  const n = normalizeHeader(cuentaNombre);
+  const m = c.match(/^([A-H])[.\s]/);
+  const letter = m ? m[1] : '';
+  if(letter==='A' || (!letter && c.indexOf('REMUNERACION')>-1)){
+    if(n.indexOf('HORA')>-1) return {driver:'dotacion_he', variable:false};
+    if(n.indexOf('GRATIFICAC')>-1) return {driver:'dotacion_grat', variable:false};
+    return {driver:'dotacion_remun', variable:false};
+  }
+  if(letter==='B' || (!letter && c.indexOf('COMISION')>-1)) return {driver:'ventas', variable:true};
+  if(letter==='C' || (!letter && c.indexOf('BONOS Y PREMIO')>-1)) return {driver:'ventas', variable:true};
+  if(letter==='F' || (!letter && c.indexOf('INDEMNIZACION')>-1)) return {driver:'indemnizaciones', variable:false};
+  return {driver:'tendencia', variable:false};
+}
+
+let state = {
+  accounts: DEFAULT_ACCOUNTS.map(a=>({...a, real:emptyMonthObj(), method:'last', growth:0, ratioOverride:null, presupuesto:0})),
+  ventasReal: emptyMonthObj(),
+  ventasProy: emptyMonthObj(),
+  startMonth: 'jun',
+  rates: {sis:1.88, mutual:0.95, afc:2.40},
+  includeCargas: true,
+  includeGratifAltas: true,
+  payroll: {month:'may', headcount:0, baseRemun:0, baseHE:0, baseGrat:0, basePrevision:0, baseCesantia:0, employees:[]},
+  altas: [],
+  bajas: [],
+  gratAjuste: { anualEstimado: 0, deltaFijo: 0, activo: true },
+  pptoTotalMensual: { ene:565187731, feb:481588614, mar:628128005, abr:606115925, may:624926170, jun:645071598, jul:622948879, ago:644838783, sep:628192029, oct:649898504, nov:633364904, dic:644574304 }
+};
+
+/* ============================================================
+   UTILIDADES
+   ============================================================ */
+function parseCLNumber(v){
+  if(v===null||v===undefined||v==='') return 0;
+  if(typeof v==='number') return v;
+  let s=String(v).trim();
+  if(s==='') return 0;
+  s = s.replace(/[^0-9.,-]/g,'');
+  if(s==='') return 0;
+  const hasComma = s.indexOf(',')>-1;
+  const hasDot = s.indexOf('.')>-1;
+  if(hasComma && hasDot){
+    s = s.replace(/\./g,'').replace(',', '.');
+  } else if(hasComma){
+    s = s.replace(',', '.');
+  } else if(hasDot){
+    // Formato chileno: puntos como separador de miles (ej. 720.000.000). parseFloat normal
+    // corta en el segundo punto, así que si hay varios puntos, o un único punto seguido de
+    // exactamente 3 dígitos, se interpreta como separador de miles y se eliminan los puntos.
+    const groups = s.split('.');
+    const looksLikeThousands = groups.length>2 || (groups.length===2 && groups[1].length===3);
+    if(looksLikeThousands) s = s.replace(/\./g,'');
+  }
+  let n = parseFloat(s);
+  return isNaN(n)?0:n;
+}
+function fmt(n){
+  if(n===null||n===undefined||isNaN(n)) return '-';
+  return Math.round(n).toLocaleString('es-CL');
+}
+function fmtK(n){
+  if(n===null||n===undefined||isNaN(n)) return '-';
+  if(Math.abs(n)>=1000000) return '$'+(n/1000000).toFixed(1)+'M';
+  if(Math.abs(n)>=1000) return '$'+(n/1000).toFixed(0)+'K';
+  return '$'+Math.round(n);
+}
+function fmtPct(n){
+  if(n===null||n===undefined||isNaN(n)) return '-';
+  let sign = n>0?'+':'';
+  return sign+n.toFixed(1)+'%';
+}
+function normalizeHeader(h){
+  return String(h||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+}
+function monthIndex(key){ return MONTHS.findIndex(m=>m.key===key); }
+function parseDateFlexible(v){
+  if(!v) return null;
+  if(v instanceof Date) return v;
+  if(typeof v==='number'){ // excel serial
+    let d = new Date(Math.round((v-25569)*86400*1000));
+    return d;
+  }
+  let s=String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){ let dd=+m[1],mm=+m[2],yy=+m[3]; if(yy<100) yy+=2000; return new Date(yy,mm-1,dd); }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m){ return new Date(+m[1], +m[2]-1, +m[3]); }
+  let d = new Date(s);
+  return isNaN(d.getTime())?null:d;
+}
+function proFactorIngreso(fecha, monthNum){
+  if(!fecha) return 1;
+  const y=fecha.getFullYear(), m=fecha.getMonth()+1, d=fecha.getDate();
+  if(y!==2026) return monthNum>=1?1:0;
+  if(monthNum < m) return 0;
+  if(monthNum > m) return 1;
+  let days = DAYS2026[monthNum];
+  let factor = (30 - Math.min(d,30) + 1)/30;
+  return Math.max(0,Math.min(1,factor));
+}
+function proFactorSalida(fecha, monthNum){
+  if(!fecha) return 1;
+  const y=fecha.getFullYear(), m=fecha.getMonth()+1, d=fecha.getDate();
+  if(y!==2026) return 1;
+  if(monthNum < m) return 1;
+  if(monthNum > m) return 0;
+  let factor = Math.min(d,30)/30;
+  return Math.max(0,Math.min(1,factor));
+}
+function aniosServicio(ingreso, salida){
+  if(!ingreso||!salida) return 0;
+  let ms = salida - ingreso;
+  return ms/(1000*3600*24*365.25);
+}
+
+/* ============================================================
+   RENDER: TAB SWITCHING
+   ============================================================ */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+    if(t.dataset.tab==='forecast') renderForecast();
+  });
+});
+
+/* ============================================================
+   PANEL 1: HISTORICO
+   ============================================================ */
+function renderHistoricoTable(){
+  // Número de meses "reales" editables = el mes desde el cual proyectar (pestaña 4).
+  // Así, cuando cierre un mes nuevo (ej. Junio), basta mover ese selector para habilitar la columna.
+  let startIdx = monthIndex(state.startMonth);
+  let html = '<thead><tr><th class="lbl">Cuenta</th><th class="lbl">Clasificación</th><th>Var</th>';
+  MONTHS.forEach((m,idx)=> html += `<th class="${idx<startIdx?'':'mini'}">${m.label}${idx>=startIdx?' (proy.)':''}</th>`);
+  html += '<th></th></tr></thead><tbody>';
+  state.accounts.forEach((a,i)=>{
+    html += `<tr>
+      <td class="lbl"><input style="width:100%;text-align:left;font-weight:600;" value="${a.cuenta}" onchange="updateAccountField(${i},'cuenta',this.value)"></td>
+      <td class="lbl"><input style="width:100%;text-align:left;" value="${a.clasif}" onchange="updateAccountField(${i},'clasif',this.value)"></td>
+      <td><span class="pill ${a.variable?'variable':'fijo'}">${a.variable?'Var':'Fijo'}</span></td>`;
+    MONTHS.forEach((m,idx)=>{
+      if(idx<startIdx){
+        let v = a.real[m.key];
+        html += `<td class="real"><input type="text" value="${v===null?'':fmt(v)}" onchange="updateAccountReal(${i},'${m.key}',this.value)"></td>`;
+      } else {
+        html += `<td class="proj">—</td>`;
+      }
+    });
+    html += `<td><button class="danger small" onclick="removeAccount(${i})">x</button></td></tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('tblHistorico').innerHTML = html;
+}
+function updateAccountField(i,field,val){ state.accounts[i][field]=val; saveState(); }
+function updateAccountReal(i,key,val){ state.accounts[i].real[key]=parseCLNumber(val); saveState(); renderHistoricoTable(); }
+function updatePptoTotalMes(key,val){
+  state.pptoTotalMensual[key] = parseCLNumber(val);
+  saveState();
+  renderForecast();
+}
+function updateAccountPresupuesto(i,val){
+  state.accounts[i].presupuesto = parseCLNumber(val);
+  saveState();
+  renderForecast();
+}
+function addAccountRow(){
+  state.accounts.push({codigo:'', cuenta:'Nueva cuenta', clasif:'d. Gastos del personal', variable:false, driver:'tendencia', real:emptyMonthObj(), method:'last', growth:0, ratioOverride:null, presupuesto:0});
+  renderAll();
+}
+function removeAccount(i){ state.accounts.splice(i,1); renderAll(); }
+function resetAccountsDefault(){
+  if(!confirm('Esto reemplaza la lista de cuentas por las 12 cuentas estándar (se pierden ediciones de nombre/clasificación, no los valores ya ingresados de las que coincidan por código).')) return;
+  let oldByCode = {}; state.accounts.forEach(a=>oldByCode[a.codigo]=a);
+  state.accounts = DEFAULT_ACCOUNTS.map(a=>{
+    let prev = oldByCode[a.codigo];
+    return {...a, real: prev?prev.real:emptyMonthObj(), method:'last', growth:0, ratioOverride:null, presupuesto: prev?(prev.presupuesto||0):0};
+  });
+  renderAll();
+}
+
+let _histImport = null; // {rows, headers}
+
+// Algunos libros/reportes traen filas de título o filtros antes del encabezado real.
+// Esta función busca, dentro de las primeras 30 filas, la fila que contiene alguna de las
+// palabras clave esperadas (ej. 'RUT' para el libro de remuneraciones, 'CLASIFICACION' para el histórico)
+// y la usa como encabezado, descartando todo lo anterior.
+function findHeaderRowIndex(aoa, keywords){
+  const limit = Math.min(aoa.length, 30);
+  for(let i=0;i<limit;i++){
+    const row = (aoa[i]||[]).map(c=>normalizeHeader(c));
+    if(keywords.some(k=> row.includes(k))) return i;
+  }
+  return 0;
+}
+function aoaToObjects(aoa, headerRowIdx){
+  const headerRow = aoa[headerRowIdx]||[];
+  const headers = headerRow.map((h,idx)=> (h===''||h===undefined||h===null) ? ('COL_'+idx) : String(h).trim());
+  const rows = [];
+  for(let i=headerRowIdx+1;i<aoa.length;i++){
+    const r = aoa[i];
+    if(!r || r.every(c=> c===''||c===undefined||c===null)) continue;
+    const obj = {};
+    headers.forEach((h,idx)=>{ obj[h] = (r[idx]!==undefined && r[idx]!==null) ? r[idx] : ''; });
+    rows.push(obj);
+  }
+  return {headers, rows};
+}
+function readSheetSmart(sheet, keywords){
+  const aoa = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+  const headerRowIdx = findHeaderRowIndex(aoa, keywords);
+  return aoaToObjects(aoa, headerRowIdx);
+}
+
+function guessCol(headers, cands){
+  let h = headers.find(h=> cands.includes(normalizeHeader(h)));
+  if(h) return h;
+  h = headers.find(h=> cands.some(c=> normalizeHeader(h).indexOf(c)>-1));
+  return h || '';
+}
+function guessMonthCol(headers, m, usedSet){
+  const variants = [m.key.toUpperCase(), m.label.toUpperCase(), m.key.toUpperCase()+'-26', m.key.toUpperCase()+'26',
+    m.key.toUpperCase()+'.26', m.key.toUpperCase()+' 26', m.key.toUpperCase()+'-2026', String(m.num), '0'+m.num,
+    '2026-0'+m.num, '2026-'+m.num];
+  let h = headers.find(h=>{
+    if(usedSet.has(h)) return false;
+    const n = normalizeHeader(h).replace(/\s+/g,'');
+    return variants.some(v=> n===v.replace(/\s+/g,'') || n.startsWith(m.key.toUpperCase()));
+  });
+  return h || '';
+}
+
+document.getElementById('fileHistorico').addEventListener('change', function(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const {headers, rows} = readSheetSmart(sheet, ['CLASIFICACION','CLAIFICACION','CUENTA']);
+      if(rows.length===0){ document.getElementById('histStatus').innerHTML='<span class="status-msg status-err">Archivo vacío o sin filas de datos.</span>'; return; }
+      _histImport = {rows, headers};
+      renderMappingUI(headers);
+      document.getElementById('histStatus').innerHTML = `<span class="status-msg status-ok">${rows.length} filas detectadas. Confirma el mapeo de columnas abajo.</span>`;
+    }catch(err){
+      document.getElementById('histStatus').innerHTML = `<span class="status-msg status-err">Error leyendo archivo: ${err.message}</span>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function renderMappingUI(headers){
+  const usedSet = new Set();
+  const guessCuenta = guessCol(headers, ['CUENTA','NOMBRE CUENTA']);
+  const guessCod = guessCol(headers, ['CUENTA CONTABLE','CODIGO','COD CUENTA','CUENTA COD']);
+  const guessClasif = guessCol(headers, ['CLASIFICACION','CLAIFICACION']);
+  const guessVar = guessCol(headers, ['VAR','TIPO','FIJO/VARIABLE']);
+  [guessCuenta,guessCod,guessClasif,guessVar].forEach(h=>h&&usedSet.add(h));
+  const startIdx = monthIndex(state.startMonth);
+  const monthGuesses = {};
+  MONTHS.slice(0,startIdx).forEach(m=>{ let g = guessMonthCol(headers, m, usedSet); if(g) usedSet.add(g); monthGuesses[m.key]=g; });
+
+  const opts = (selected)=> '<option value="">-- ninguna --</option>' + headers.map(h=>`<option value="${h}" ${h===selected?'selected':''}>${h}</option>`).join('');
+  const field = (id,label,selected)=> `<div class="field"><label>${label}</label><select id="${id}">${opts(selected)}</select></div>`;
+
+  let html = '';
+  html += field('mapCuenta','Nombre de cuenta', guessCuenta);
+  html += field('mapCod','Código de cuenta (opcional)', guessCod);
+  html += field('mapClasif','Clasificación (a-h)', guessClasif);
+  MONTHS.slice(0,startIdx).forEach(m=>{ html += field('mapMonth_'+m.key, m.label, monthGuesses[m.key]); });
+  document.getElementById('mappingFields').innerHTML = html;
+  document.getElementById('mappingPanel').style.display = 'block';
+}
+function cancelHistMapping(){
+  _histImport = null;
+  document.getElementById('mappingPanel').style.display = 'none';
+  document.getElementById('histStatus').innerHTML = '<span class="mini">Carga cancelada.</span>';
+}
+function applyHistMapping(){
+  if(!_histImport) return;
+  const {rows} = _histImport;
+  const colCuenta = document.getElementById('mapCuenta').value;
+  const colCod = document.getElementById('mapCod').value;
+  const colClasif = document.getElementById('mapClasif').value;
+  const startIdxApply = monthIndex(state.startMonth);
+  const monthCols = {};
+  MONTHS.slice(0,startIdxApply).forEach(m=> monthCols[m.key] = document.getElementById('mapMonth_'+m.key).value);
+
+  if(!colCuenta){ alert('Debes indicar al menos la columna de Nombre de cuenta.'); return; }
+
+  let oldByName = {}; state.accounts.forEach(a=> oldByName[normalizeHeader(a.cuenta)]=a);
+
+  let newAccounts = rows.map(r=>{
+    let real = emptyMonthObj();
+    MONTHS.slice(0,startIdxApply).forEach(m=>{ if(monthCols[m.key]) real[m.key]=parseCLNumber(r[monthCols[m.key]]); });
+    let cuenta = String(r[colCuenta]||'').trim();
+    let clasif = colClasif? String(r[colClasif]||'').trim() : '';
+    let {driver, variable} = deriveDriverFromClasif(clasif, cuenta);
+    let prev = oldByName[normalizeHeader(cuenta)];
+    return {
+      codigo: colCod? String(r[colCod]||''):'',
+      cuenta: cuenta || 'Cuenta sin nombre',
+      clasif,
+      variable, driver,
+      real, method:'last', growth:0, ratioOverride:null, presupuesto: prev?(prev.presupuesto||0):0
+    };
+  }).filter(a=> a.cuenta && a.cuenta!=='Cuenta sin nombre');
+
+  if(newAccounts.length===0){ alert('No se pudo construir ninguna cuenta con el mapeo elegido. Revisa las columnas seleccionadas.'); return; }
+  state.accounts = newAccounts;
+  document.getElementById('mappingPanel').style.display='none';
+  document.getElementById('histStatus').innerHTML = `<span class="status-msg status-ok">${newAccounts.length} cuentas cargadas con valores mensuales.</span>`;
+  _histImport = null;
+  renderAll();
+  saveState();
+}
+
+/* ============================================================
+   PANEL 2: LIBRO DE REMUNERACIONES
+   ============================================================ */
+const PAYROLL_MAP = {
+  remun: ['SUELDO BASE','ASIGNACION FAMILIAR','RECARGO DOMINGO','DIFERENCIA DE SUELDO','DIF ASIGNACION CELULAR','ASIG. GASTOS CELULAR','ASIG GASTOS CELULAR','DIAS ADICIONALES','SUBSIDIO 3 PRIMEROS DIAS LICENCIA MEDICA'],
+  he: ['HORAS EXTRAS'],
+  grat: ['A/GRATIFICACION','A/GRATIFICACION LIQUIDA','GRATIFICACION MENSUAL'],
+  basePrevision: ['BASE IMP. PREVISION','BASE IMP PREVISION'],
+  baseCesantia: ['BASE IMP. CESANTIA','BASE IMP CESANTIA'],
+  sueldoBaseCol: ['SUELDO BASE'],
+  totalHaberes: ['TOTAL HABERES']
+};
+function buildPayrollSums(rows, headers){
+  const findCols = (cands)=> headers.filter(h=> cands.includes(normalizeHeader(h)));
+  const sumRow=(r,cols)=> cols.reduce((s,c)=> s+parseCLNumber(r[c]),0);
+  const colsRemun = findCols(PAYROLL_MAP.remun);
+  const colsHE = findCols(PAYROLL_MAP.he);
+  const colsGrat = findCols(PAYROLL_MAP.grat);
+  const colsPrev = findCols(PAYROLL_MAP.basePrevision);
+  const colsCes = findCols(PAYROLL_MAP.baseCesantia);
+  const colsSueldoBase = findCols(PAYROLL_MAP.sueldoBaseCol);
+  const colRut = headers.find(h=>normalizeHeader(h)==='RUT');
+  const colNombres = headers.find(h=>normalizeHeader(h)==='NOMBRES');
+  const colApPat = headers.find(h=>normalizeHeader(h)==='AP PATERNO');
+  const colApMat = headers.find(h=>normalizeHeader(h)==='AP MATERNO');
+  const colCargo = headers.find(h=>normalizeHeader(h)==='CARGO');
+
+  let totals = {headcount:0, baseRemun:0, baseHE:0, baseGrat:0, basePrevision:0, baseCesantia:0};
+  let employees = [];
+  rows.forEach(r=>{
+    if(!colRut || !r[colRut]) return;
+    totals.headcount++;
+    let remun = sumRow(r,colsRemun);
+    let he = sumRow(r,colsHE);
+    let grat = sumRow(r,colsGrat);
+    let prev = sumRow(r,colsPrev);
+    let ces = sumRow(r,colsCes);
+    let sueldoBase = sumRow(r,colsSueldoBase);
+    totals.baseRemun += remun; totals.baseHE += he; totals.baseGrat += grat;
+    totals.basePrevision += prev; totals.baseCesantia += ces;
+    let nombreCompleto = [r[colNombres],r[colApPat],r[colApMat]].filter(Boolean).join(' ');
+    employees.push({
+      rut: r[colRut], nombre: nombreCompleto || r[colRut], cargo: colCargo? r[colCargo]:'',
+      sueldoBase, remun, he, grat, basePrevision:prev, baseCesantia:ces,
+      totalHaberes: sumRow(r, findCols(PAYROLL_MAP.totalHaberes))
+    });
+  });
+  return {totals, employees};
+}
+
+document.getElementById('filePayroll').addEventListener('change', function(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const {headers, rows} = readSheetSmart(sheet, ['RUT']);
+      if(rows.length===0) throw new Error('Archivo vacío o no se encontró una fila de encabezados con la columna RUT.');
+      const {totals, employees} = buildPayrollSums(rows, headers);
+      state.payroll.headcount = totals.headcount;
+      state.payroll.baseRemun = totals.baseRemun;
+      state.payroll.baseHE = totals.baseHE;
+      state.payroll.baseGrat = totals.baseGrat;
+      state.payroll.basePrevision = totals.basePrevision;
+      state.payroll.baseCesantia = totals.baseCesantia;
+      state.payroll.employees = employees;
+      document.getElementById('payrollStatus').innerHTML = `<div class="status-msg status-ok">Libro cargado: ${totals.headcount} trabajadores detectados.</div>`;
+      renderPayrollSummary();
+      renderBajaSelectOptions();
+      recalcGratDelta();
+      saveState();
+    }catch(err){
+      document.getElementById('payrollStatus').innerHTML = `<div class="status-msg status-err">Error leyendo archivo: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function renderPayrollSummary(){
+  if(state.payroll.headcount===0){ document.getElementById('payrollSummaryCard').style.display='none'; return; }
+  document.getElementById('payrollSummaryCard').style.display='block';
+  document.getElementById('kpiHeadcount').textContent = state.payroll.headcount;
+  document.getElementById('kpiSueldoBase').textContent = fmtK(state.payroll.baseRemun);
+  document.getElementById('kpiHorasExtras').textContent = fmtK(state.payroll.baseHE);
+  document.getElementById('kpiGratif').textContent = fmtK(state.payroll.baseGrat);
+  document.getElementById('kpiBasePrevision').textContent = fmtK(state.payroll.basePrevision);
+  document.getElementById('kpiBaseCesantia').textContent = fmtK(state.payroll.baseCesantia);
+  let html = '<thead><tr><th class="lbl">Nombre</th><th class="lbl">Cargo</th><th>Sueldo base</th><th>Remun. base+fijos</th><th>Horas extras</th><th>Gratificación</th><th>Base prevision</th></tr></thead><tbody>';
+  state.payroll.employees.forEach(emp=>{
+    html += `<tr><td class="lbl">${emp.nombre}</td><td class="lbl">${emp.cargo}</td><td>${fmt(emp.sueldoBase)}</td><td>${fmt(emp.remun)}</td><td>${fmt(emp.he)}</td><td>${fmt(emp.grat)}</td><td>${fmt(emp.basePrevision)}</td></tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('tblPayrollPreview').innerHTML = html;
+}
+
+function renderPayrollMonthSelect(){
+  let sel = document.getElementById('payrollMonth');
+  sel.innerHTML = MONTHS.map(m=>`<option value="${m.key}" ${m.key===state.payroll.month?'selected':''}>${m.label}</option>`).join('');
+  sel.onchange = ()=>{
+    state.payroll.month = sel.value;
+    // El libro de remuneraciones siempre representa el último mes CERRADO.
+    // Por lo tanto el mes desde el cual proyectar (pestaña 4) debe ser el siguiente.
+    let idx = monthIndex(sel.value);
+    if(idx>=0 && idx+1<MONTHS.length){ state.startMonth = MONTHS[idx+1].key; }
+    saveState();
+    renderAll();
+  };
+}
+
+/* ============================================================
+   AJUSTE GRATIFICACION LEGAL (devengo vs anticipo del libro)
+   ============================================================ */
+function recalcGratSuggested(){
+  const startIdx = monthIndex(state.startMonth);
+  let accGrat = state.accounts.find(a=>a.driver==='dotacion_grat');
+  if(!accGrat) accGrat = state.accounts.find(a=> normalizeHeader(a.cuenta).indexOf('GRATIFICAC')>-1);
+  const statusEl = document.getElementById('gratStatus');
+  if(!accGrat){
+    statusEl.innerHTML = '<div class="status-msg status-err">No se encontró ninguna cuenta de Gratificaciones en la pestaña 1. Carga el histórico primero.</div>';
+    return;
+  }
+  let vals = [];
+  MONTHS.slice(0,startIdx).forEach(m=>{ let v = accGrat.real[m.key]; if(v!==null && v!==undefined && v!==0) vals.push(v); });
+  if(vals.length===0){
+    statusEl.innerHTML = `<div class="status-msg status-err">La cuenta "${accGrat.cuenta}" no tiene valores reales cargados antes de ${MONTHS[startIdx].label} (pestaña 1, mes de inicio de proyección). Carga el histórico o ajusta el mes de inicio.</div>`;
+    return;
+  }
+  const promedio = vals.reduce((a,b)=>a+b,0)/vals.length;
+  state.gratAjuste.anualEstimado = Math.round(promedio*12);
+  document.getElementById('gratAnualInput').value = fmt(state.gratAjuste.anualEstimado);
+  recalcGratDelta();
+  statusEl.innerHTML = `<div class="status-msg status-ok">Usando ${vals.length} mes(es) reales de "${accGrat.cuenta}" (promedio mensual ${fmt(promedio)}) &rarr; anual estimado ${fmt(state.gratAjuste.anualEstimado)}.</div>`;
+}
+function recalcGratDelta(){
+  state.gratAjuste.deltaFijo = (state.gratAjuste.anualEstimado/12) - (state.payroll.baseGrat||0);
+  renderGratAjusteKpis();
+  saveState();
+}
+function renderGratAjusteKpis(){
+  document.getElementById('kpiGratAnualMes').textContent = fmtK((state.gratAjuste.anualEstimado||0)/12);
+  document.getElementById('kpiGratLibroBase').textContent = fmtK(state.payroll.baseGrat||0);
+  document.getElementById('kpiGratDeltaFijo').textContent = fmtK(state.gratAjuste.deltaFijo||0);
+}
+
+/* ============================================================
+   PANEL 3: ALTAS / BAJAS
+   ============================================================ */
+function addAlta(){ state.altas.push({nombre:'', cargo:'', fechaIngreso:'', sueldoBase:0}); renderAltas(); }
+function removeAlta(i){ state.altas.splice(i,1); renderAltas(); }
+function updateAlta(i,field,val){ state.altas[i][field] = field==='sueldoBase'? parseCLNumber(val): val; saveState(); renderAltas(); }
+function renderAltas(){
+  let html = '<thead><tr><th class="lbl">Nombre / cargo</th><th>Fecha ingreso</th><th>Sueldo base</th><th></th></tr></thead><tbody>';
+  state.altas.forEach((a,i)=>{
+    html += `<tr>
+      <td class="lbl"><input style="width:100%;text-align:left;" placeholder="Nombre - Cargo" value="${a.nombre}" onchange="updateAlta(${i},'nombre',this.value)"></td>
+      <td><input type="date" style="width:100%;" value="${a.fechaIngreso}" onchange="updateAlta(${i},'fechaIngreso',this.value)"></td>
+      <td><input type="text" style="width:100%;" value="${a.sueldoBase?fmt(a.sueldoBase):''}" onchange="updateAlta(${i},'sueldoBase',this.value)"></td>
+      <td><button class="danger small" onclick="removeAlta(${i})">x</button></td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('tblAltas').innerHTML = html;
+}
+
+function addBaja(){ state.bajas.push({empleadoRef:'', nombre:'', fechaSalida:'', tipo:'Renuncia', sueldoBase:0, basePrevision:0, baseCesantia:0, fechaIngreso:'', sinAvisoPrevio:false, vacacionesPendientesDias:0, montoIndemnizacion:0, montoManual:false}); renderBajas(); }
+function removeBaja(i){ state.bajas.splice(i,1); renderBajas(); }
+function updateBaja(i,field,val){
+  let b = state.bajas[i];
+  if(field==='empleadoRef'){
+    b.empleadoRef = val;
+    let emp = state.payroll.employees.find(e=> (e.rut+'|'+e.nombre)===val);
+    if(emp){ b.nombre=emp.nombre; b.sueldoBase=emp.sueldoBase; b.basePrevision=emp.basePrevision; b.baseCesantia=emp.baseCesantia; }
+  } else if(field==='sueldoBase'||field==='basePrevision'||field==='baseCesantia'||field==='vacacionesPendientesDias'||field==='montoIndemnizacion'){
+    b[field] = parseCLNumber(val);
+    if(field==='montoIndemnizacion') b.montoManual = true;
+  } else if(field==='sinAvisoPrevio'){ b[field]=val; }
+  else { b[field]=val; }
+  if(field!=='montoIndemnizacion') recalcSuggestedIndemnizacion(i);
+  saveState(); renderBajas();
+}
+function recalcSuggestedIndemnizacion(i){
+  let b = state.bajas[i];
+  if(b.montoManual) return;
+  let ingreso = parseDateFlexible(b.fechaIngreso);
+  let salida = parseDateFlexible(b.fechaSalida);
+  let monto = (b.sueldoBase/30)*(b.vacacionesPendientesDias||0);
+  if(b.tipo==='Despido'){
+    let anios = Math.min(11, Math.floor(aniosServicio(ingreso,salida)));
+    monto += anios * b.sueldoBase;
+    if(b.sinAvisoPrevio) monto += b.sueldoBase;
+  }
+  b.montoIndemnizacion = Math.round(monto);
+}
+function renderBajaSelectOptions(){ renderBajas(); }
+function renderBajas(){
+  let opts = state.payroll.employees.map(e=>`<option value="${e.rut}|${e.nombre}">${e.nombre}</option>`).join('');
+  let html = '<thead><tr><th class="lbl">Empleado (libro)</th><th class="lbl">Nombre</th><th>Fecha salida</th><th>Tipo</th><th>Sueldo base</th><th>Vac. pend. (días)</th><th>Sin aviso previo</th><th>Monto indemnización</th><th></th></tr></thead><tbody>';
+  state.bajas.forEach((b,i)=>{
+    html += `<tr>
+      <td class="lbl"><select style="width:100%;" onchange="updateBaja(${i},'empleadoRef',this.value)"><option value="">-- manual --</option>${opts.replace(`value="${b.empleadoRef}"`, `value="${b.empleadoRef}" selected`)}</select></td>
+      <td class="lbl"><input style="width:100%;text-align:left;" value="${b.nombre}" onchange="updateBaja(${i},'nombre',this.value)"></td>
+      <td><input type="date" style="width:100%;" value="${b.fechaSalida}" onchange="updateBaja(${i},'fechaSalida',this.value)"></td>
+      <td><select style="width:100%;" onchange="updateBaja(${i},'tipo',this.value)">
+        <option ${b.tipo==='Renuncia'?'selected':''}>Renuncia</option>
+        <option ${b.tipo==='Despido'?'selected':''}>Despido</option>
+        <option ${b.tipo==='Mutuo acuerdo'?'selected':''}>Mutuo acuerdo</option>
+      </select></td>
+      <td><input type="text" style="width:100%;" value="${b.sueldoBase?fmt(b.sueldoBase):''}" onchange="updateBaja(${i},'sueldoBase',this.value)"></td>
+      <td><input type="number" value="${b.vacacionesPendientesDias||0}" style="width:100%;" onchange="updateBaja(${i},'vacacionesPendientesDias',this.value)"></td>
+      <td><input type="checkbox" ${b.sinAvisoPrevio?'checked':''} onchange="updateBaja(${i},'sinAvisoPrevio',this.checked)"></td>
+      <td><input type="text" style="width:100%;" value="${fmt(b.montoIndemnizacion)}" onchange="updateBaja(${i},'montoIndemnizacion',this.value)"></td>
+      <td><button class="danger small" onclick="removeBaja(${i})">x</button></td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('tblBajas').innerHTML = html;
+}
+
+/* ============================================================
+   PANEL 4: VENTAS Y PARAMETROS
+   ============================================================ */
+function renderVentasTable(){
+  let html = '<thead><tr><th class="lbl">Concepto</th>';
+  MONTHS.forEach(m=> html+=`<th>${m.label}</th>`);
+  html += '</tr></thead><tbody><tr><td class="lbl">Ventas ($)</td>';
+  let startIdx = monthIndex(state.startMonth);
+  MONTHS.forEach((m,idx)=>{
+    if(idx<startIdx){
+      html += `<td class="real"><input type="text" value="${state.ventasReal[m.key]?fmt(state.ventasReal[m.key]):''}" onchange="updateVentas('real','${m.key}',this.value)"></td>`;
+    } else {
+      html += `<td class="proj"><input type="text" value="${state.ventasProy[m.key]?fmt(state.ventasProy[m.key]):''}" onchange="updateVentas('proy','${m.key}',this.value)"></td>`;
+    }
+  });
+  html += '</tr></tbody>';
+  document.getElementById('tblVentas').innerHTML = html;
+}
+function updateVentas(tipo,key,val){
+  if(tipo==='real') state.ventasReal[key]=parseCLNumber(val);
+  else state.ventasProy[key]=parseCLNumber(val);
+  saveState();
+}
+function renderStartMonthSelect(){
+  let sel = document.getElementById('startMonth');
+  sel.innerHTML = MONTHS.map(m=>`<option value="${m.key}" ${m.key===state.startMonth?'selected':''}>${m.label}</option>`).join('');
+  sel.onchange = ()=>{ state.startMonth = sel.value; saveState(); renderAll(); };
+}
+function renderMetodosTable(){
+  const relevant = state.accounts.filter(a=>a.driver==='tendencia' || a.driver==='indemnizaciones');
+  let html = '<thead><tr><th class="lbl">Cuenta</th><th>Método</th><th>Crecimiento mensual manual (%)</th></tr></thead><tbody>';
+  relevant.forEach((a)=>{
+    let i = state.accounts.indexOf(a);
+    html += `<tr>
+      <td class="lbl">${a.cuenta}</td>
+      <td><select onchange="updateAccountField(${i},'method',this.value)">
+        <option value="last" ${a.method==='last'?'selected':''}>Replicar último mes real</option>
+        <option value="avg3" ${a.method==='avg3'?'selected':''}>Promedio últimos 3 meses</option>
+        <option value="growth" ${a.method==='growth'?'selected':''}>Crecimiento % manual</option>
+      </select></td>
+      <td><input type="number" step="0.1" value="${a.growth||0}" style="width:70px;" onchange="updateAccountField(${i},'growth',parseFloat(this.value)||0)"></td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('tblMetodos').innerHTML = html;
+}
+
+['rateSIS','rateMutual','rateAFC'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', function(){
+    state.rates.sis = parseFloat(document.getElementById('rateSIS').value)||0;
+    state.rates.mutual = parseFloat(document.getElementById('rateMutual').value)||0;
+    state.rates.afc = parseFloat(document.getElementById('rateAFC').value)||0;
+    saveState();
+  });
+});
+document.getElementById('includeCargas').addEventListener('change', function(){ state.includeCargas=this.checked; saveState(); });
+document.getElementById('includeGratifAltas').addEventListener('change', function(){ state.includeGratifAltas=this.checked; saveState(); });
+document.getElementById('gratAnualInput').addEventListener('change', function(){ state.gratAjuste.anualEstimado = parseCLNumber(this.value); recalcGratDelta(); });
+document.getElementById('gratAjusteActivo').addEventListener('change', function(){ state.gratAjuste.activo = this.checked; saveState(); });
+
+/* ============================================================
+   MOTOR DE FORECAST
+   ============================================================ */
+function getDotacionAjustada(monthNum){
+  // baseline desde libro
+  let remun = state.payroll.baseRemun;
+  let he = state.payroll.baseHE;
+  let grat = state.payroll.baseGrat;
+  let basePrevision = state.payroll.basePrevision;
+  let baseCesantia = state.payroll.baseCesantia;
+
+  state.altas.forEach(a=>{
+    let fecha = parseDateFlexible(a.fechaIngreso);
+    let f = proFactorIngreso(fecha, monthNum);
+    remun += a.sueldoBase * f;
+    basePrevision += a.sueldoBase * f;
+    baseCesantia += a.sueldoBase * f;
+    if(state.includeGratifAltas) grat += 0.25*a.sueldoBase*f;
+  });
+  state.bajas.forEach(b=>{
+    let fecha = parseDateFlexible(b.fechaSalida);
+    let f = proFactorSalida(fecha, monthNum); // 1=mes completo activo, 0=ya no
+    let removal = 1-f;
+    remun -= b.sueldoBase * removal;
+    basePrevision -= (b.basePrevision||b.sueldoBase) * removal;
+    baseCesantia -= (b.baseCesantia||b.sueldoBase) * removal;
+    grat -= 0.25*b.sueldoBase*removal;
+  });
+  return {remun:Math.max(0,remun), he:Math.max(0,he), grat:Math.max(0,grat), basePrevision:Math.max(0,basePrevision), baseCesantia:Math.max(0,baseCesantia)};
+}
+
+function getVentasMes(idx){
+  const m = MONTHS[idx];
+  const startIdx = monthIndex(state.startMonth);
+  return idx<startIdx ? (state.ventasReal[m.key]||0) : (state.ventasProy[m.key]||0);
+}
+
+function getRatioVentas(account){
+  if(account.ratioOverride!==null && account.ratioOverride!==undefined && account.ratioOverride!=='') return account.ratioOverride/100;
+  let nums=[], dens=[];
+  MONTHS.slice(0,monthIndex(state.startMonth)).forEach((m,idx)=>{
+    let v = account.real[m.key];
+    let venta = state.ventasReal[m.key];
+    if(v!==null && venta) { nums.push(v); dens.push(venta); }
+  });
+  if(dens.length===0) return 0;
+  let sumN = nums.reduce((a,b)=>a+b,0), sumD = dens.reduce((a,b)=>a+b,0);
+  return sumD>0? sumN/sumD : 0;
+}
+
+function getTrendBaseline(account, startIdx){
+  let lastVal = null;
+  for(let i=startIdx-1;i>=0;i--){
+    let v = account.real[MONTHS[i].key];
+    if(v!==null){ lastVal=v; break; }
+  }
+  if(account.method==='avg3'){
+    let vals=[];
+    for(let i=startIdx-1;i>=0 && vals.length<3;i--){
+      let v = account.real[MONTHS[i].key];
+      if(v!==null) vals.push(v);
+    }
+    if(vals.length) lastVal = vals.reduce((a,b)=>a+b,0)/vals.length;
+  }
+  return lastVal||0;
+}
+
+function getIndemnizacionesDelMes(monthNum){
+  let total=0;
+  state.bajas.forEach(b=>{
+    let fecha = parseDateFlexible(b.fechaSalida);
+    if(fecha && fecha.getFullYear()===2026 && (fecha.getMonth()+1)===monthNum) total += (b.montoIndemnizacion||0);
+  });
+  return total;
+}
+
+function computeForecast(){
+  const startIdx = monthIndex(state.startMonth);
+  let results = state.accounts.map(a=>({account:a, values:emptyMonthObj()}));
+  let cargasPorMes = emptyMonthObj();
+
+  MONTHS.forEach((m,idx)=>{
+    let monthNum = m.num;
+    let isProj = idx>=startIdx;
+    // dotacion ajustada para este mes (solo se usa si es proyectado)
+    let dot = isProj? getDotacionAjustada(monthNum) : null;
+
+    results.forEach(res=>{
+      const a = res.account;
+      if(!isProj){
+        res.values[m.key] = a.real[m.key];
+        return;
+      }
+      let val = 0;
+      if(a.driver==='dotacion_remun') val = dot.remun;
+      else if(a.driver==='dotacion_he') val = dot.he;
+      else if(a.driver==='dotacion_grat') val = dot.grat + (state.gratAjuste.activo ? (state.gratAjuste.deltaFijo||0) : 0);
+      else if(a.driver==='ventas'){
+        let ratio = getRatioVentas(a);
+        val = ratio * getVentasMes(idx);
+      } else if(a.driver==='indemnizaciones'){
+        let base = getTrendBaseline(a, startIdx);
+        if(a.method==='growth'){
+          let monthsFromStart = idx-startIdx;
+          base = base*Math.pow(1+(a.growth||0)/100, monthsFromStart+1);
+        }
+        val = base + getIndemnizacionesDelMes(monthNum);
+      } else { // tendencia
+        let base = getTrendBaseline(a, startIdx);
+        if(a.method==='growth'){
+          let monthsFromStart = idx-startIdx;
+          base = base*Math.pow(1+(a.growth||0)/100, monthsFromStart+1);
+        }
+        val = base;
+      }
+      res.values[m.key] = val;
+    });
+
+    if(isProj){
+      cargasPorMes[m.key] = dot.basePrevision*(state.rates.sis+state.rates.mutual)/100 + dot.baseCesantia*(state.rates.afc)/100;
+    } else {
+      cargasPorMes[m.key] = null;
+    }
+  });
+
+  return {results, cargasPorMes, startIdx};
+}
+
+/* ============================================================
+   PANEL 5: FORECAST RENDER
+   ============================================================ */
+function renderForecast(){
+  const {results, cargasPorMes, startIdx} = computeForecast();
+
+  let html = '<thead><tr><th class="lbl frozen1">Cuenta</th><th class="lbl frozen2">Clasificación</th>';
+  MONTHS.forEach((m,idx)=> html += `<th class="${idx<startIdx?'real':'proj'}">${m.label}</th>`);
+  html += '<th>Total año</th><th>Ppto anual (editable)</th><th>Var $ (vs ppto)</th><th>Var % (vs ppto)</th></tr></thead><tbody>';
+
+  let totalPorMes = emptyMonthObj();
+  let totalPptoCuentas = 0;
+  results.forEach(res=>{
+    let i = state.accounts.indexOf(res.account);
+    html += `<tr><td class="lbl frozen1">${res.account.cuenta}</td><td class="lbl frozen2">${res.account.clasif}</td>`;
+    let totalAnio=0;
+    MONTHS.forEach((m,idx)=>{
+      let v = res.values[m.key]||0;
+      totalAnio += v;
+      totalPorMes[m.key] = (totalPorMes[m.key]||0)+v;
+      html += `<td class="${idx<startIdx?'real':'proj'}">${fmt(v)}</td>`;
+    });
+    let ppto = res.account.presupuesto || 0;
+    totalPptoCuentas += ppto;
+    let varAbs = ppto? (totalAnio-ppto) : null;
+    let varPct = ppto? ((totalAnio-ppto)/ppto*100) : null;
+    let varClass = varAbs===null? '' : (varAbs>0?'over':'under');
+    html += `<td><b>${fmt(totalAnio)}</b></td>`;
+    html += `<td class="ppto"><input type="text" style="width:100%;" value="${ppto?fmt(ppto):''}" onchange="updateAccountPresupuesto(${i},this.value)"></td>`;
+    html += `<td class="varcell ${varClass}">${varAbs===null?'-':fmt(varAbs)}</td>`;
+    html += `<td class="varcell ${varClass}">${varPct===null?'-':fmtPct(varPct)}</td>`;
+    html += `</tr>`;
+  });
+
+  // fila cargas adicionales
+  html += `<tr class="totalrow"><td class="lbl frozen1">Cargas adicionales patronales (SIS+Mutual+AFC)</td><td class="lbl frozen2">Referencial</td>`;
+  let totalCargas=0;
+  MONTHS.forEach((m,idx)=>{
+    let v = cargasPorMes[m.key];
+    if(v===null){ html += `<td class="real">-</td>`; }
+    else { totalCargas += v; html += `<td class="proj">${fmt(v)}</td>`; if(state.includeCargas) totalPorMes[m.key]=(totalPorMes[m.key]||0)+v; }
+  });
+  html += `<td><b>${fmt(totalCargas)}</b></td><td>-</td><td>-</td><td>-</td></tr>`;
+
+  // fila total general (comparada contra el "Presupuesto total mensual" del grupo 3.1)
+  html += `<tr class="grandrow"><td class="lbl frozen1">TOTAL GASTO 3.1${state.includeCargas?' (incl. cargas patronales)':''}</td><td class="lbl frozen2"></td>`;
+  let granTotal=0;
+  MONTHS.forEach((m,idx)=>{
+    let v = totalPorMes[m.key]||0;
+    granTotal += v;
+    html += `<td>${fmt(v)}</td>`;
+  });
+  let granPptoMensual = MONTHS.reduce((s,m)=> s+((state.pptoTotalMensual&&state.pptoTotalMensual[m.key])||0), 0);
+  let granPpto = granPptoMensual>0 ? granPptoMensual : totalPptoCuentas;
+  let granVarAbs = granPpto? (granTotal-granPpto) : null;
+  let granVarPct = granPpto? ((granTotal-granPpto)/granPpto*100) : null;
+  let granVarClass = granVarAbs===null? '' : (granVarAbs>0?'over':'under');
+  html += `<td>${fmt(granTotal)}</td><td>${granPpto?fmt(granPpto):'-'}</td><td class="varcell ${granVarClass}">${granVarAbs===null?'-':fmt(granVarAbs)}</td><td class="varcell ${granVarClass}">${granVarPct===null?'-':fmtPct(granVarPct)}</td></tr>`;
+
+  // fila editable: presupuesto mensual real del grupo 3.1 (sin dividir por 12, mes a mes)
+  html += `<tr class="totalrow"><td class="lbl frozen1">Presupuesto mensual (grupo 3.1)</td><td class="lbl frozen2">Editable</td>`;
+  MONTHS.forEach(m=>{
+    let v = state.pptoTotalMensual ? state.pptoTotalMensual[m.key] : null;
+    html += `<td class="ppto"><input type="text" style="width:100%;" value="${v?fmt(v):''}" onchange="updatePptoTotalMes('${m.key}',this.value)"></td>`;
+  });
+  html += `<td><b>${fmt(granPpto)}</b></td><td>-</td><td>-</td><td>-</td></tr>`;
+  html += '</tbody>';
+  document.getElementById('tblForecast').innerHTML = html;
+
+  // KPIs
+  let realSum=0, projSum=0;
+  MONTHS.forEach((m,idx)=>{ if(idx<startIdx) realSum+=totalPorMes[m.key]||0; else projSum+=totalPorMes[m.key]||0; });
+  document.getElementById('forecastKpis').innerHTML = `
+    <div class="kpi"><div class="v">${fmtK(realSum)}</div><div class="l">Gasto real acumulado (${startIdx>0? (MONTHS[0].label+(startIdx>1?' a '+MONTHS[startIdx-1].label:'')) : 'sin meses reales'})</div></div>
+    <div class="kpi"><div class="v">${fmtK(projSum)}</div><div class="l">Gasto proyectado (${MONTHS[startIdx].label+(startIdx<MONTHS.length-1?' a '+MONTHS[MONTHS.length-1].label:'')})</div></div>
+    <div class="kpi"><div class="v">${fmtK(granTotal)}</div><div class="l">Total estimado cierre 2026</div></div>
+    <div class="kpi"><div class="v">${state.payroll.headcount + state.altas.length - state.bajas.length}</div><div class="l">Dotación estimada a Dic-26 (libro ${state.payroll.month?MONTHS.find(m=>m.key===state.payroll.month).label:''} ${state.altas.length?'+'+state.altas.length+' altas':''} ${state.bajas.length?'-'+state.bajas.length+' bajas':''})</div></div>
+  `;
+  document.getElementById('forecastNote').innerHTML = `Proyección calculada desde <b>${MONTHS[startIdx].label}</b> en adelante. Los meses anteriores muestran los valores reales ingresados en la pestaña 1. ${state.payroll.headcount===0?'<b>Atención:</b> no has cargado el libro de remuneraciones; las cuentas de Remuneraciones/Horas Extras/Gratificaciones se proyectarán en $0 hasta que lo cargues.':''}`;
+
+  // presupuesto mensual real para el gráfico: viene del "Presupuesto total mensual" del grupo 3.1.
+  const monthlyBudget = emptyMonthObj();
+  MONTHS.forEach(m=> monthlyBudget[m.key] = (state.pptoTotalMensual ? state.pptoTotalMensual[m.key] : null) || null);
+
+  renderChart(totalPorMes, startIdx, monthlyBudget);
+}
+
+function renderChart(totalPorMes, startIdx, monthlyBudget){
+  const svg = document.getElementById('chartSvg');
+  const w = svg.clientWidth||900;
+  const vals = MONTHS.map(m=>totalPorMes[m.key]||0);
+  const budgets = MONTHS.map(m=> (monthlyBudget && monthlyBudget[m.key]!=null) ? monthlyBudget[m.key] : null);
+  const hasBudget = budgets.some(b=>b!==null && b>0);
+  const h = hasBudget? 300 : 260;
+  const sub = document.getElementById('chartSub');
+  if(sub) sub.style.display = hasBudget? 'none' : 'block';
+  const legend = document.getElementById('chartLegend');
+  if(legend){ legend.querySelectorAll('span').forEach((el,idx)=>{ if(idx>=2) el.style.display = hasBudget?'inline-flex':'none'; }); }
+
+  const allVals = vals.concat(hasBudget? budgets.filter(b=>b!==null) : []);
+  const max = Math.max(...allVals, 1);
+  const padL=60, padB=30, padT= hasBudget?58:20, padR=20;
+  const chartW = w-padL-padR, chartH = h-padT-padB;
+  const barW = chartW/MONTHS.length*0.6;
+  let svgContent = '';
+  // ejes
+  svgContent += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#ccc"/>`;
+  svgContent += `<line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#ccc"/>`;
+
+  // linea punteada de presupuesto mensual de referencia
+  if(hasBudget){
+    let points = [];
+    MONTHS.forEach((m,idx)=>{
+      if(budgets[idx]==null) return;
+      let x = padL + (chartW/MONTHS.length)*idx + (chartW/MONTHS.length)/2;
+      let y = h-padB-(budgets[idx]/max)*chartH;
+      points.push(x+','+y);
+    });
+    svgContent += `<polyline points="${points.join(' ')}" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.85"/>`;
+  }
+
+  MONTHS.forEach((m,idx)=>{
+    let x = padL + (chartW/MONTHS.length)*idx + (chartW/MONTHS.length-barW)/2;
+    let barH = (vals[idx]/max)*chartH;
+    let y = h-padB-barH;
+    let color = idx<startIdx? '#9fb7c4' : '#0e7c86';
+    let budget = budgets[idx];
+    let over = false;
+    if(hasBudget && budget!==null && budget>0){
+      let diffAbs = vals[idx]-budget;
+      over = diffAbs>0;
+    }
+    svgContent += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="3" ${hasBudget && budget? `stroke="${over?'#c0392b':'#1e8449'}" stroke-width="1.5"`:''}></rect>`;
+    svgContent += `<text x="${x+barW/2}" y="${h-padB+14}" font-size="10" text-anchor="middle" fill="#6b7a85">${m.label.split('-')[0]}</text>`;
+
+    if(hasBudget && budget!==null && budget>0){
+      let diffAbs = vals[idx]-budget;
+      let diffPct = (diffAbs/budget)*100;
+      let color2 = over? '#c0392b':'#1e8449';
+      let arrow = over? '▲':'▼';
+      let sign = diffAbs>0?'+':'';
+      svgContent += `<text x="${x+barW/2}" y="${y-30}" font-size="9.5" font-weight="700" text-anchor="middle" fill="#1c2b36">${fmtK(vals[idx])}</text>`;
+      svgContent += `<text x="${x+barW/2}" y="${y-17}" font-size="9" font-weight="700" text-anchor="middle" fill="${color2}">${arrow} ${sign}${fmtK(diffAbs)}</text>`;
+      svgContent += `<text x="${x+barW/2}" y="${y-6}" font-size="8.5" text-anchor="middle" fill="${color2}">(${fmtPct(diffPct)})</text>`;
+    } else {
+      svgContent += `<text x="${x+barW/2}" y="${y-4}" font-size="9" text-anchor="middle" fill="#1c2b36">${fmtK(vals[idx])}</text>`;
+    }
+  });
+  svg.innerHTML = svgContent;
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  svg.setAttribute('height', h);
+}
+
+/* ============================================================
+   EXPORT / IMPORT / PERSISTENCIA
+   ============================================================ */
+function saveState(){
+  try{ localStorage.setItem('forecastGAVState', JSON.stringify(state)); }catch(e){}
+}
+function loadState(){
+  try{
+    let raw = localStorage.getItem('forecastGAVState');
+    if(raw){ let loaded = JSON.parse(raw); state = Object.assign(state, loaded); }
+  }catch(e){}
+  normalizeState();
+}
+// Asegura compatibilidad con respaldos guardados antes de existir "pptoTotalMensual".
+function normalizeState(){
+  if(!state.pptoTotalMensual) state.pptoTotalMensual = emptyMonthObj();
+  state.accounts.forEach(a=>{
+    if(typeof a.presupuesto !== 'number') a.presupuesto = 0;
+    if('pptoMensual' in a) delete a.pptoMensual;
+  });
+}
+function exportState(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='forecast_gav_personal_backup.json'; a.click();
+}
+document.getElementById('fileImport').addEventListener('change', function(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      state = JSON.parse(ev.target.result);
+      normalizeState();
+      renderAll(); saveState();
+      alert('Respaldo importado correctamente.');
+    }catch(err){ alert('Error importando: '+err.message); }
+  };
+  reader.readAsText(file);
+});
+function exportForecastCSV(){
+  const {results, cargasPorMes} = computeForecast();
+  let lines = ['Cuenta;Clasificacion;'+MONTHS.map(m=>m.label).join(';')];
+  results.forEach(res=>{
+    lines.push(res.account.cuenta+';'+res.account.clasif+';'+MONTHS.map(m=>Math.round(res.values[m.key]||0)).join(';'));
+  });
+  lines.push('Cargas adicionales patronales;Referencial;'+MONTHS.map(m=>Math.round(cargasPorMes[m.key]||0)).join(';'));
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='forecast_2026.csv'; a.click();
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function renderAll(){
+  renderHistoricoTable();
+  renderPayrollMonthSelect();
+  renderPayrollSummary();
+  renderAltas();
+  renderBajas();
+  renderVentasTable();
+  renderStartMonthSelect();
+  renderMetodosTable();
+  document.getElementById('rateSIS').value = state.rates.sis;
+  document.getElementById('rateMutual').value = state.rates.mutual;
+  document.getElementById('rateAFC').value = state.rates.afc;
+  document.getElementById('includeCargas').checked = state.includeCargas;
+  document.getElementById('includeGratifAltas').checked = state.includeGratifAltas;
+  document.getElementById('gratAnualInput').value = state.gratAjuste.anualEstimado? fmt(state.gratAjuste.anualEstimado):'';
+  document.getElementById('gratAjusteActivo').checked = state.gratAjuste.activo;
+  renderGratAjusteKpis();
+}
+loadState();
+renderAll();
+</script>
+</body>
+</html>
