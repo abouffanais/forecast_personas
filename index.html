@@ -138,6 +138,10 @@
         <label>Mes que representa este libro</label>
         <select id="payrollMonth"></select>
       </div>
+      <div class="field">
+        <label>Extras fijos sobre sueldo base (%)</label>
+        <input type="number" step="0.01" id="rateExtrasFijos" value="9">
+      </div>
     </div>
     <div id="payrollStatus"></div>
   </div>
@@ -152,7 +156,7 @@
       <div class="kpi"><div class="v" id="kpiBasePrevision">-</div><div class="l">Base imponible previsión (total)</div></div>
       <div class="kpi"><div class="v" id="kpiBaseCesantia">-</div><div class="l">Base imponible cesantía (total)</div></div>
     </div>
-    <p class="note">Mapeo de columnas usado &mdash; Remuneraciones: Sueldo base + Asignación familiar + Recargo domingo + Diferencia de sueldo + Dif. asignación celular + Asig. gastos celular + Días adicionales + Subsidio licencia médica. Horas Extras: columna Horas Extras. Gratificaciones: A/Gratificación + A/Gratificación líquida + Gratificación mensual. Si tu libro usa otros nombres de columnas, revisa que los encabezados coincidan (no distingue mayúsculas/tildes).</p>
+    <p class="note">Mapeo de columnas usado &mdash; Remuneraciones: Sueldo base + Extras fijos (calculados como el % indicado arriba sobre el sueldo base de cada trabajador, no se suman columnas individuales del libro). Horas Extras: columna Horas Extras. Gratificaciones: A/Gratificación + A/Gratificación líquida + Gratificación mensual. Si tu libro usa otros nombres de columnas, revisa que los encabezados coincidan (no distingue mayúsculas/tildes).</p>
     <div class="tableWrap" style="max-height:280px;overflow-y:auto;">
       <table id="tblPayrollPreview"></table>
     </div>
@@ -347,7 +351,7 @@ let state = {
   ventasReal: emptyMonthObj(),
   ventasProy: emptyMonthObj(),
   startMonth: 'jun',
-  rates: {sis:1.88, mutual:0.95, afc:2.40},
+  rates: {sis:1.88, mutual:0.95, afc:2.40, extrasFijos:9},
   includeCargas: true,
   includeGratifAltas: true,
   payroll: {month:'may', headcount:0, baseRemun:0, baseHE:0, baseGrat:0, basePrevision:0, baseCesantia:0, employees:[]},
@@ -662,10 +666,9 @@ const PAYROLL_MAP = {
   sueldoBaseCol: ['SUELDO BASE'],
   totalHaberes: ['TOTAL HABERES']
 };
-function buildPayrollSums(rows, headers){
+function buildPayrollSums(rows, headers, extrasFijosRate){
   const findCols = (cands)=> headers.filter(h=> cands.includes(normalizeHeader(h)));
   const sumRow=(r,cols)=> cols.reduce((s,c)=> s+parseCLNumber(r[c]),0);
-  const colsRemun = findCols(PAYROLL_MAP.remun);
   const colsHE = findCols(PAYROLL_MAP.he);
   const colsGrat = findCols(PAYROLL_MAP.grat);
   const colsPrev = findCols(PAYROLL_MAP.basePrevision);
@@ -676,24 +679,26 @@ function buildPayrollSums(rows, headers){
   const colApPat = headers.find(h=>normalizeHeader(h)==='AP PATERNO');
   const colApMat = headers.find(h=>normalizeHeader(h)==='AP MATERNO');
   const colCargo = headers.find(h=>normalizeHeader(h)==='CARGO');
+  const rate = (extrasFijosRate!==undefined && extrasFijosRate!==null) ? extrasFijosRate : 9;
 
   let totals = {headcount:0, baseRemun:0, baseHE:0, baseGrat:0, basePrevision:0, baseCesantia:0};
   let employees = [];
   rows.forEach(r=>{
     if(!colRut || !r[colRut]) return;
     totals.headcount++;
-    let remun = sumRow(r,colsRemun);
+    let sueldoBase = sumRow(r,colsSueldoBase);
+    let extrasFijos = sueldoBase * (rate/100);
+    let remun = sueldoBase + extrasFijos;
     let he = sumRow(r,colsHE);
     let grat = sumRow(r,colsGrat);
     let prev = sumRow(r,colsPrev);
     let ces = sumRow(r,colsCes);
-    let sueldoBase = sumRow(r,colsSueldoBase);
     totals.baseRemun += remun; totals.baseHE += he; totals.baseGrat += grat;
     totals.basePrevision += prev; totals.baseCesantia += ces;
     let nombreCompleto = [r[colNombres],r[colApPat],r[colApMat]].filter(Boolean).join(' ');
     employees.push({
       rut: r[colRut], nombre: nombreCompleto || r[colRut], cargo: colCargo? r[colCargo]:'',
-      sueldoBase, remun, he, grat, basePrevision:prev, baseCesantia:ces,
+      sueldoBase, extrasFijos, remun, he, grat, basePrevision:prev, baseCesantia:ces,
       totalHaberes: sumRow(r, findCols(PAYROLL_MAP.totalHaberes))
     });
   });
@@ -710,7 +715,7 @@ document.getElementById('filePayroll').addEventListener('change', function(e){
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const {headers, rows} = readSheetSmart(sheet, ['RUT']);
       if(rows.length===0) throw new Error('Archivo vacío o no se encontró una fila de encabezados con la columna RUT.');
-      const {totals, employees} = buildPayrollSums(rows, headers);
+      const {totals, employees} = buildPayrollSums(rows, headers, state.rates.extrasFijos);
       state.payroll.headcount = totals.headcount;
       state.payroll.baseRemun = totals.baseRemun;
       state.payroll.baseHE = totals.baseHE;
@@ -739,12 +744,26 @@ function renderPayrollSummary(){
   document.getElementById('kpiGratif').textContent = fmtK(state.payroll.baseGrat);
   document.getElementById('kpiBasePrevision').textContent = fmtK(state.payroll.basePrevision);
   document.getElementById('kpiBaseCesantia').textContent = fmtK(state.payroll.baseCesantia);
-  let html = '<thead><tr><th class="lbl">Nombre</th><th class="lbl">Cargo</th><th>Sueldo base</th><th>Remun. base+fijos</th><th>Horas extras</th><th>Gratificación</th><th>Base prevision</th></tr></thead><tbody>';
+  let html = '<thead><tr><th class="lbl">Nombre</th><th class="lbl">Cargo</th><th>Sueldo base</th><th>Extras fijos</th><th>Remun. base+fijos</th><th>Horas extras</th><th>Gratificación</th><th>Base prevision</th></tr></thead><tbody>';
   state.payroll.employees.forEach(emp=>{
-    html += `<tr><td class="lbl">${emp.nombre}</td><td class="lbl">${emp.cargo}</td><td>${fmt(emp.sueldoBase)}</td><td>${fmt(emp.remun)}</td><td>${fmt(emp.he)}</td><td>${fmt(emp.grat)}</td><td>${fmt(emp.basePrevision)}</td></tr>`;
+    html += `<tr><td class="lbl">${emp.nombre}</td><td class="lbl">${emp.cargo}</td><td>${fmt(emp.sueldoBase)}</td><td>${fmt(emp.extrasFijos||0)}</td><td>${fmt(emp.remun)}</td><td>${fmt(emp.he)}</td><td>${fmt(emp.grat)}</td><td>${fmt(emp.basePrevision)}</td></tr>`;
   });
   html += '</tbody>';
   document.getElementById('tblPayrollPreview').innerHTML = html;
+}
+
+function recalcPayrollExtras(){
+  const rate = state.rates.extrasFijos;
+  if(state.payroll.employees.length===0) return;
+  let totalRemun = 0;
+  state.payroll.employees.forEach(emp=>{
+    emp.extrasFijos = emp.sueldoBase * (rate/100);
+    emp.remun = emp.sueldoBase + emp.extrasFijos;
+    totalRemun += emp.remun;
+  });
+  state.payroll.baseRemun = totalRemun;
+  renderPayrollSummary();
+  saveState();
 }
 
 function renderPayrollMonthSelect(){
@@ -924,6 +943,10 @@ function renderMetodosTable(){
     state.rates.afc = parseFloat(document.getElementById('rateAFC').value)||0;
     saveState();
   });
+});
+document.getElementById('rateExtrasFijos').addEventListener('change', function(){
+  state.rates.extrasFijos = parseFloat(this.value)||0;
+  recalcPayrollExtras();
 });
 document.getElementById('includeCargas').addEventListener('change', function(){ state.includeCargas=this.checked; saveState(); });
 document.getElementById('includeGratifAltas').addEventListener('change', function(){ state.includeGratifAltas=this.checked; saveState(); });
@@ -1281,6 +1304,7 @@ function loadState(){
 function normalizeState(){
   if(!state.pptoTotalMensual) state.pptoTotalMensual = emptyMonthObj();
   if(!state.gastosExtras) state.gastosExtras = [];
+  if(typeof state.rates.extrasFijos !== 'number') state.rates.extrasFijos = 9;
   state.accounts.forEach(a=>{
     if(typeof a.presupuesto !== 'number') a.presupuesto = 0;
     if('pptoMensual' in a) delete a.pptoMensual;
@@ -1332,6 +1356,7 @@ function renderAll(){
   document.getElementById('rateSIS').value = state.rates.sis;
   document.getElementById('rateMutual').value = state.rates.mutual;
   document.getElementById('rateAFC').value = state.rates.afc;
+  document.getElementById('rateExtrasFijos').value = state.rates.extrasFijos;
   document.getElementById('includeCargas').checked = state.includeCargas;
   document.getElementById('includeGratifAltas').checked = state.includeGratifAltas;
   document.getElementById('gratAnualInput').value = state.gratAjuste.anualEstimado? fmt(state.gratAjuste.anualEstimado):'';
