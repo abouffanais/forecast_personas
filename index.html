@@ -75,6 +75,7 @@
   .toggle-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
   .mini{font-size:11px;color:var(--muted);}
   hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0;}
+  td.locked{background:#eef1f3;color:#9aa7ae;}
 </style>
 </head>
 <body>
@@ -89,7 +90,8 @@
   <div class="tab" data-tab="libro">2. Libro de remuneraciones</div>
   <div class="tab" data-tab="personal">3. Movimientos de personal</div>
   <div class="tab" data-tab="parametros">4. Ventas y parámetros</div>
-  <div class="tab" data-tab="forecast">5. Forecast 2026</div>
+  <div class="tab" data-tab="extras">5. Gastos extras</div>
+  <div class="tab" data-tab="forecast">6. Forecast 2026</div>
 </div>
 
 <main>
@@ -243,7 +245,18 @@
   </div>
 </div>
 
-<!-- ============ PANEL 5: FORECAST ============ -->
+<!-- ============ PANEL 5: GASTOS EXTRAS ============ -->
+<div class="panel" id="panel-extras">
+  <div class="card">
+    <h2>Gastos extras manuales por cuenta</h2>
+    <p class="sub">Agrega montos adicionales puntuales (ej. proyectos, gastos no recurrentes) que se sumarán a la proyección de la cuenta seleccionada en la pestaña Forecast. Los meses que ya están cerrados como reales (según el selector "Proyectar desde" de la pestaña 4) quedan bloqueados: solo puedes ingresar montos en los meses de proyección hacia adelante.</p>
+    <div class="tableWrap"><table id="tblExtras"></table></div>
+    <button class="secondary small" style="margin-top:10px;" onclick="addExtra()">+ Agregar gasto extra</button>
+    <p class="note" style="margin-top:10px;">Estos montos se suman por cuenta y por mes a lo que calcule el motor de forecast (dotación, ventas o tendencia, según corresponda) — no reemplazan el cálculo, se agregan encima.</p>
+  </div>
+</div>
+
+<!-- ============ PANEL 6: FORECAST ============ -->
 <div class="panel" id="panel-forecast">
   <div class="card">
     <div class="kpis" id="forecastKpis"></div>
@@ -340,6 +353,7 @@ let state = {
   payroll: {month:'may', headcount:0, baseRemun:0, baseHE:0, baseGrat:0, basePrevision:0, baseCesantia:0, employees:[]},
   altas: [],
   bajas: [],
+  gastosExtras: [],
   gratAjuste: { anualEstimado: 0, deltaFijo: 0, activo: true },
   pptoTotalMensual: { ene:565187731, feb:481588614, mar:628128005, abr:606115925, may:624926170, jun:645071598, jul:622948879, ago:644838783, sep:628192029, oct:649898504, nov:633364904, dic:644574304 }
 };
@@ -439,6 +453,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+    if(t.dataset.tab==='extras') renderExtras();
     if(t.dataset.tab==='forecast') renderForecast();
   });
 });
@@ -916,6 +931,56 @@ document.getElementById('gratAnualInput').addEventListener('change', function(){
 document.getElementById('gratAjusteActivo').addEventListener('change', function(){ state.gratAjuste.activo = this.checked; saveState(); });
 
 /* ============================================================
+   PANEL 5: GASTOS EXTRAS
+   ============================================================ */
+function addExtra(){
+  state.gastosExtras.push({ cuentaIdx: state.accounts.length? 0 : null, concepto:'', montos: emptyMonthObj() });
+  renderExtras();
+  saveState();
+}
+function removeExtra(i){ state.gastosExtras.splice(i,1); renderExtras(); saveState(); }
+function updateExtraField(i,field,val){
+  state.gastosExtras[i][field] = field==='cuentaIdx'? (val===''? null: parseInt(val,10)) : val;
+  saveState();
+}
+function updateExtraMonto(i,key,val){
+  state.gastosExtras[i].montos[key] = parseCLNumber(val);
+  saveState();
+}
+function renderExtras(){
+  const startIdx = monthIndex(state.startMonth);
+  const cuentaOpts = state.accounts.map((a,idx)=>`<option value="${idx}">${a.cuenta}</option>`).join('');
+  let html = '<thead><tr><th class="lbl">Cuenta</th><th class="lbl">Concepto</th>';
+  MONTHS.forEach((m,idx)=> html += `<th class="${idx<startIdx?'':'mini'}">${m.label}${idx<startIdx?' (real)':''}</th>`);
+  html += '<th>Total</th><th></th></tr></thead><tbody>';
+  state.gastosExtras.forEach((ex,i)=>{
+    let total = 0;
+    MONTHS.forEach((m,idx)=>{ if(idx>=startIdx) total += (ex.montos[m.key]||0); });
+    html += `<tr>
+      <td class="lbl"><select style="width:100%;" onchange="updateExtraField(${i},'cuentaIdx',this.value)">${cuentaOpts.replace(`value="${ex.cuentaIdx}"`, `value="${ex.cuentaIdx}" selected`)}</select></td>
+      <td class="lbl"><input style="width:100%;text-align:left;" placeholder="Concepto" value="${ex.concepto}" onchange="updateExtraField(${i},'concepto',this.value)"></td>`;
+    MONTHS.forEach((m,idx)=>{
+      if(idx<startIdx){
+        html += `<td class="locked" title="Mes real bloqueado, se edita en la pestaña 1">—</td>`;
+      } else {
+        let v = ex.montos[m.key];
+        html += `<td class="proj"><input type="text" value="${v?fmt(v):''}" onchange="updateExtraMonto(${i},'${m.key}',this.value)"></td>`;
+      }
+    });
+    html += `<td><b>${fmt(total)}</b></td><td><button class="danger small" onclick="removeExtra(${i})">x</button></td></tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('tblExtras').innerHTML = html;
+}
+function getExtrasPorCuentaYMes(cuentaIdx, monthKey){
+  let total = 0;
+  state.gastosExtras.forEach(ex=>{
+    if(ex.cuentaIdx===cuentaIdx) total += (ex.montos[monthKey]||0);
+  });
+  return total;
+}
+
+/* ============================================================
    MOTOR DE FORECAST
    ============================================================ */
 function getDotacionAjustada(monthNum){
@@ -1004,6 +1069,7 @@ function computeForecast(){
 
     results.forEach(res=>{
       const a = res.account;
+      const accountIdx = state.accounts.indexOf(a);
       if(!isProj){
         res.values[m.key] = a.real[m.key];
         return;
@@ -1030,6 +1096,8 @@ function computeForecast(){
         }
         val = base;
       }
+      // suma los gastos extras manuales cargados para esta cuenta y este mes proyectado
+      val += getExtrasPorCuentaYMes(accountIdx, m.key);
       res.values[m.key] = val;
     });
 
@@ -1044,7 +1112,7 @@ function computeForecast(){
 }
 
 /* ============================================================
-   PANEL 5: FORECAST RENDER
+   PANEL 6: FORECAST RENDER
    ============================================================ */
 function renderForecast(){
   const {results, cargasPorMes, startIdx} = computeForecast();
@@ -1209,9 +1277,10 @@ function loadState(){
   }catch(e){}
   normalizeState();
 }
-// Asegura compatibilidad con respaldos guardados antes de existir "pptoTotalMensual".
+// Asegura compatibilidad con respaldos guardados antes de existir "pptoTotalMensual" y "gastosExtras".
 function normalizeState(){
   if(!state.pptoTotalMensual) state.pptoTotalMensual = emptyMonthObj();
+  if(!state.gastosExtras) state.gastosExtras = [];
   state.accounts.forEach(a=>{
     if(typeof a.presupuesto !== 'number') a.presupuesto = 0;
     if('pptoMensual' in a) delete a.pptoMensual;
@@ -1259,6 +1328,7 @@ function renderAll(){
   renderVentasTable();
   renderStartMonthSelect();
   renderMetodosTable();
+  renderExtras();
   document.getElementById('rateSIS').value = state.rates.sis;
   document.getElementById('rateMutual').value = state.rates.mutual;
   document.getElementById('rateAFC').value = state.rates.afc;
