@@ -83,6 +83,7 @@
 <header>
   <h1>Calculadora Forecast 2026 &mdash; GAV 3.1 Gastos y Sueldos del Personal</h1>
   <p>Proyección de cierre de año a partir de información real Ene&ndash;May 2026 y libro de remuneraciones</p>
+  <p id="syncStatus" style="margin-top:6px;"></p>
 </header>
 
 <div class="tabs" id="tabs">
@@ -286,13 +287,22 @@
     </div>
   </div>
   <div class="card">
+    <h2>Sincronización compartida</h2>
+    <p class="sub">Si se configuró un servidor compartido (Google Apps Script), los datos se guardan ahí automáticamente y cualquier persona que abra este link ve la misma información.</p>
+    <div class="row-flex">
+      <button class="secondary" onclick="manualSync()">Sincronizar ahora</button>
+      <button class="secondary" onclick="reloadFromServer()">Recargar datos del servidor</button>
+      <span id="syncStatusCard" class="mini"></span>
+    </div>
+  </div>
+  <div class="card">
     <h2>Exportar / respaldar datos</h2>
     <div class="row-flex">
       <button onclick="exportState()">Descargar respaldo (JSON)</button>
       <label class="filebtn secondary">Importar respaldo (JSON)<input type="file" id="fileImport" accept=".json"></label>
       <button class="secondary" onclick="exportForecastCSV()">Exportar forecast a CSV</button>
     </div>
-    <p class="note" style="margin-top:8px;">Los datos se guardan automáticamente en este navegador (localStorage). Usa el respaldo JSON para moverlos a otro computador o conservarlos a salvo.</p>
+    <p class="note" style="margin-top:8px;">Si NO hay servidor compartido configurado, los datos se guardan solo en este navegador (localStorage) y no se comparten al enviar el link. Usa el respaldo JSON para moverlos a otro computador o compartirlos manualmente.</p>
   </div>
 </div>
 
@@ -302,6 +312,14 @@
 /* ============================================================
    MODELO DE DATOS
    ============================================================ */
+/* ============================================================
+   SINCRONIZACIÓN COMPARTIDA (Google Apps Script)
+   Pega aquí la URL "/exec" que te entrega Apps Script al publicar el
+   Web App (ver instrucciones del backend). Mientras esté vacía, la
+   calculadora funciona solo con localStorage (datos NO compartidos).
+   ============================================================ */
+const REMOTE_SYNC_URL = "https://script.google.com/macros/s/AKfycbyM259gIOLosPI0ENoArYPJisOlO9jWLRAiMWq4QWl3Izx3DoeQOtOTPD1qPwpANMEhfA/exec"; // Ej: "https://script.google.com/macros/s/AKfycb.../exec"
+
 const MONTHS = [
   {key:'ene',label:'Ene-26',num:1},{key:'feb',label:'Feb-26',num:2},{key:'mar',label:'Mar-26',num:3},
   {key:'abr',label:'Abr-26',num:4},{key:'may',label:'May-26',num:5},{key:'jun',label:'Jun-26',num:6},
@@ -1290,14 +1308,98 @@ function renderChart(totalPorMes, startIdx, monthlyBudget){
 /* ============================================================
    EXPORT / IMPORT / PERSISTENCIA
    ============================================================ */
-function saveState(){
-  try{ localStorage.setItem('forecastGAVState', JSON.stringify(state)); }catch(e){}
+let _syncTimer = null;
+let _syncing = false;
+
+function setSyncStatus(text){
+  const el1 = document.getElementById('syncStatus');
+  const el2 = document.getElementById('syncStatusCard');
+  if(el1) el1.textContent = text;
+  if(el2) el2.textContent = text;
 }
-function loadState(){
+
+function saveState(){
+  // Guardado local inmediato (respaldo/caché de este navegador).
+  try{ localStorage.setItem('forecastGAVState', JSON.stringify(state)); }catch(e){}
+  scheduleRemoteSync();
+}
+
+function scheduleRemoteSync(){
+  if(!REMOTE_SYNC_URL) return;
+  setSyncStatus('Cambios pendientes de sincronizar…');
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(syncToRemote, 900);
+}
+
+async function syncToRemote(){
+  if(!REMOTE_SYNC_URL) return;
+  if(_syncing){ scheduleRemoteSync(); return; } // ya hay un envío en curso, reintenta pronto
+  _syncing = true;
   try{
-    let raw = localStorage.getItem('forecastGAVState');
-    if(raw){ let loaded = JSON.parse(raw); state = Object.assign(state, loaded); }
-  }catch(e){}
+    setSyncStatus('Guardando en servidor compartido…');
+    await fetch(REMOTE_SYNC_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'}, // evita preflight CORS en Apps Script
+      body: JSON.stringify(state)
+    });
+    setSyncStatus('Guardado en servidor compartido a las ' + new Date().toLocaleTimeString('es-CL'));
+  }catch(err){
+    setSyncStatus('No se pudo guardar en el servidor compartido (revisa tu conexión). Los cambios quedaron solo en este navegador.');
+  }finally{
+    _syncing = false;
+  }
+}
+
+function manualSync(){
+  if(!REMOTE_SYNC_URL){ alert('No hay un servidor compartido configurado (REMOTE_SYNC_URL vacío en el código). Los datos solo se guardan en este navegador.'); return; }
+  clearTimeout(_syncTimer);
+  syncToRemote();
+}
+
+async function reloadFromServer(){
+  if(!REMOTE_SYNC_URL){ alert('No hay un servidor compartido configurado (REMOTE_SYNC_URL vacío en el código).'); return; }
+  if(!confirm('Esto reemplaza los datos que ves ahora por la última versión guardada en el servidor compartido. ¿Continuar?')) return;
+  try{
+    setSyncStatus('Recargando datos del servidor…');
+    const res = await fetch(REMOTE_SYNC_URL, {cache:'no-store'});
+    const json = await res.json();
+    if(json && json.ok && json.data && Object.keys(json.data).length){
+      state = Object.assign(state, json.data);
+      normalizeState();
+      renderAll();
+      setSyncStatus('Datos recargados desde el servidor compartido a las ' + new Date().toLocaleTimeString('es-CL'));
+    } else {
+      setSyncStatus('El servidor compartido aún no tiene datos guardados.');
+    }
+  }catch(err){
+    setSyncStatus('No se pudo conectar al servidor compartido para recargar.');
+  }
+}
+
+async function loadState(){
+  let loadedRemote = false;
+  if(REMOTE_SYNC_URL){
+    try{
+      setSyncStatus('Cargando datos compartidos…');
+      const res = await fetch(REMOTE_SYNC_URL, {cache:'no-store'});
+      const json = await res.json();
+      if(json && json.ok && json.data && Object.keys(json.data).length){
+        state = Object.assign(state, json.data);
+        loadedRemote = true;
+        setSyncStatus('Datos cargados desde el servidor compartido.');
+      } else {
+        setSyncStatus('Servidor compartido conectado, aún sin datos guardados.');
+      }
+    }catch(err){
+      setSyncStatus('No se pudo conectar al servidor compartido; usando datos guardados en este navegador.');
+    }
+  }
+  if(!loadedRemote){
+    try{
+      let raw = localStorage.getItem('forecastGAVState');
+      if(raw){ let loaded = JSON.parse(raw); state = Object.assign(state, loaded); }
+    }catch(e){}
+  }
   normalizeState();
 }
 // Asegura compatibilidad con respaldos guardados antes de existir "pptoTotalMensual" y "gastosExtras".
@@ -1363,8 +1465,10 @@ function renderAll(){
   document.getElementById('gratAjusteActivo').checked = state.gratAjuste.activo;
   renderGratAjusteKpis();
 }
-loadState();
-renderAll();
+(async function initApp(){
+  await loadState();
+  renderAll();
+})();
 </script>
 </body>
 </html>
