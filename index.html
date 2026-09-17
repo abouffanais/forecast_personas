@@ -1341,6 +1341,52 @@ function jsonpRequest(url, timeoutMs){
   });
 }
 
+// fetch() con mode:'no-cors' resulta poco confiable para el guardado (el navegador
+// puede dar el envío por hecho sin que realmente llegue al servidor). Un <form>
+// enviado a un <iframe> oculto SÍ está garantizado: los formularios no están
+// sujetos a las restricciones de CORS.
+function formPostToRemote(url, payloadStr){
+  return new Promise((resolve, reject)=>{
+    let iframe = document.getElementById('_forecastGavSyncFrame');
+    if(!iframe){
+      iframe = document.createElement('iframe');
+      iframe.name = '_forecastGavSyncFrame';
+      iframe.id = '_forecastGavSyncFrame';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+    let done = false;
+    const timer = setTimeout(()=>{
+      if(done) return;
+      done = true;
+      iframe.removeEventListener('load', onLoad);
+      reject(new Error('Tiempo de espera agotado al guardar.'));
+    }, 15000);
+    function onLoad(){
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      iframe.removeEventListener('load', onLoad);
+      resolve();
+    }
+    iframe.addEventListener('load', onLoad);
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = iframe.name;
+    form.style.display = 'none';
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = payloadStr;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(()=>{ if(form.parentNode) form.parentNode.removeChild(form); }, 0);
+  });
+}
+
 let _syncTimer = null;
 let _syncing = false;
 
@@ -1370,15 +1416,7 @@ async function syncToRemote(){
   _syncing = true;
   try{
     setSyncStatus('Guardando en servidor compartido…');
-    // mode:'no-cors' evita que el navegador bloquee el envío por falta del header
-    // Access-Control-Allow-Origin; a cambio no podemos leer la respuesta, pero
-    // para guardar no la necesitamos (si el POST no llega, el catch de abajo actúa).
-    await fetch(REMOTE_SYNC_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type': 'text/plain;charset=utf-8'}, // evita preflight CORS en Apps Script
-      body: JSON.stringify(state)
-    });
+    await formPostToRemote(REMOTE_SYNC_URL, JSON.stringify(state));
     setSyncStatus('Guardado en servidor compartido a las ' + new Date().toLocaleTimeString('es-CL'));
   }catch(err){
     setSyncStatus('No se pudo guardar en el servidor compartido (revisa tu conexión). Los cambios quedaron solo en este navegador.');
