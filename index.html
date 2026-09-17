@@ -1308,6 +1308,39 @@ function renderChart(totalPorMes, startIdx, monthlyBudget){
 /* ============================================================
    EXPORT / IMPORT / PERSISTENCIA
    ============================================================ */
+// Apps Script no envía el header Access-Control-Allow-Origin, así que fetch()
+// normal no puede LEER la respuesta desde otro dominio (Vercel). Para lecturas
+// usamos JSONP (una etiqueta <script>, que no está sujeta a CORS).
+function jsonpRequest(url, timeoutMs){
+  timeoutMs = timeoutMs || 10000;
+  return new Promise((resolve, reject)=>{
+    const cbName = '_forecastGavCb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+    const script = document.createElement('script');
+    let done = false;
+    let timer;
+    const cleanup = ()=>{
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timer);
+    };
+    window[cbName] = function(data){
+      if(done) return;
+      done = true; cleanup(); resolve(data);
+    };
+    script.onerror = function(){
+      if(done) return;
+      done = true; cleanup(); reject(new Error('No se pudo cargar la respuesta del servidor.'));
+    };
+    timer = setTimeout(()=>{
+      if(done) return;
+      done = true; cleanup(); reject(new Error('Tiempo de espera agotado.'));
+    }, timeoutMs);
+    const sep = url.indexOf('?')>-1 ? '&' : '?';
+    script.src = url + sep + 'callback=' + encodeURIComponent(cbName) + '&_ts=' + Date.now();
+    document.head.appendChild(script);
+  });
+}
+
 let _syncTimer = null;
 let _syncing = false;
 
@@ -1337,8 +1370,12 @@ async function syncToRemote(){
   _syncing = true;
   try{
     setSyncStatus('Guardando en servidor compartido…');
+    // mode:'no-cors' evita que el navegador bloquee el envío por falta del header
+    // Access-Control-Allow-Origin; a cambio no podemos leer la respuesta, pero
+    // para guardar no la necesitamos (si el POST no llega, el catch de abajo actúa).
     await fetch(REMOTE_SYNC_URL, {
       method: 'POST',
+      mode: 'no-cors',
       headers: {'Content-Type': 'text/plain;charset=utf-8'}, // evita preflight CORS en Apps Script
       body: JSON.stringify(state)
     });
@@ -1361,8 +1398,7 @@ async function reloadFromServer(){
   if(!confirm('Esto reemplaza los datos que ves ahora por la última versión guardada en el servidor compartido. ¿Continuar?')) return;
   try{
     setSyncStatus('Recargando datos del servidor…');
-    const res = await fetch(REMOTE_SYNC_URL, {cache:'no-store'});
-    const json = await res.json();
+    const json = await jsonpRequest(REMOTE_SYNC_URL);
     if(json && json.ok && json.data && Object.keys(json.data).length){
       state = Object.assign(state, json.data);
       normalizeState();
@@ -1381,8 +1417,7 @@ async function loadState(){
   if(REMOTE_SYNC_URL){
     try{
       setSyncStatus('Cargando datos compartidos…');
-      const res = await fetch(REMOTE_SYNC_URL, {cache:'no-store'});
-      const json = await res.json();
+      const json = await jsonpRequest(REMOTE_SYNC_URL);
       if(json && json.ok && json.data && Object.keys(json.data).length){
         state = Object.assign(state, json.data);
         loadedRemote = true;
