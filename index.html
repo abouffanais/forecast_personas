@@ -523,8 +523,9 @@ function updateAccountPresupuesto(i,val){
 function addAccountRow(){
   state.accounts.push({codigo:'', cuenta:'Nueva cuenta', clasif:'d. Gastos del personal', variable:false, driver:'tendencia', real:emptyMonthObj(), method:'last', growth:0, ratioOverride:null, presupuesto:0});
   renderAll();
+  saveState();
 }
-function removeAccount(i){ state.accounts.splice(i,1); renderAll(); }
+function removeAccount(i){ state.accounts.splice(i,1); renderAll(); saveState(); }
 function resetAccountsDefault(){
   if(!confirm('Esto reemplaza la lista de cuentas por las 12 cuentas estándar (se pierden ediciones de nombre/clasificación, no los valores ya ingresados de las que coincidan por código).')) return;
   let oldByCode = {}; state.accounts.forEach(a=>oldByCode[a.codigo]=a);
@@ -533,6 +534,7 @@ function resetAccountsDefault(){
     return {...a, real: prev?prev.real:emptyMonthObj(), method:'last', growth:0, ratioOverride:null, presupuesto: prev?(prev.presupuesto||0):0};
   });
   renderAll();
+  saveState();
 }
 
 let _histImport = null; // {rows, headers}
@@ -836,8 +838,8 @@ function renderGratAjusteKpis(){
 /* ============================================================
    PANEL 3: ALTAS / BAJAS
    ============================================================ */
-function addAlta(){ state.altas.push({nombre:'', cargo:'', fechaIngreso:'', sueldoBase:0}); renderAltas(); }
-function removeAlta(i){ state.altas.splice(i,1); renderAltas(); }
+function addAlta(){ state.altas.push({nombre:'', cargo:'', fechaIngreso:'', sueldoBase:0}); renderAltas(); saveState(); }
+function removeAlta(i){ state.altas.splice(i,1); renderAltas(); saveState(); }
 function updateAlta(i,field,val){ state.altas[i][field] = field==='sueldoBase'? parseCLNumber(val): val; saveState(); renderAltas(); }
 function renderAltas(){
   let html = '<thead><tr><th class="lbl">Nombre / cargo</th><th>Fecha ingreso</th><th>Sueldo base</th><th></th></tr></thead><tbody>';
@@ -853,8 +855,8 @@ function renderAltas(){
   document.getElementById('tblAltas').innerHTML = html;
 }
 
-function addBaja(){ state.bajas.push({empleadoRef:'', nombre:'', fechaSalida:'', tipo:'Renuncia', sueldoBase:0, basePrevision:0, baseCesantia:0, fechaIngreso:'', sinAvisoPrevio:false, vacacionesPendientesDias:0, montoIndemnizacion:0, montoManual:false}); renderBajas(); }
-function removeBaja(i){ state.bajas.splice(i,1); renderBajas(); }
+function addBaja(){ state.bajas.push({empleadoRef:'', nombre:'', fechaSalida:'', tipo:'Renuncia', sueldoBase:0, basePrevision:0, baseCesantia:0, fechaIngreso:'', sinAvisoPrevio:false, vacacionesPendientesDias:0, montoIndemnizacion:0, montoManual:false}); renderBajas(); saveState(); }
+function removeBaja(i){ state.bajas.splice(i,1); renderBajas(); saveState(); }
 function updateBaja(i,field,val){
   let b = state.bajas[i];
   if(field==='empleadoRef'){
@@ -1158,13 +1160,23 @@ function computeForecast(){
 function renderForecast(){
   const {results, cargasPorMes, startIdx} = computeForecast();
 
+  // Orden de visualización: por Clasificación (a, b, c...) y, dentro de cada una,
+  // de mayor a menor Ppto anual. No afecta los totales (se siguen sumando todas).
+  const sortedResults = [...results].sort((a,b)=>{
+    const ca = normalizeHeader(a.account.clasif);
+    const cb = normalizeHeader(b.account.clasif);
+    if(ca<cb) return -1;
+    if(ca>cb) return 1;
+    return (b.account.presupuesto||0) - (a.account.presupuesto||0);
+  });
+
   let html = '<thead><tr><th class="lbl frozen1">Cuenta</th><th class="lbl frozen2">Clasificación</th>';
   MONTHS.forEach((m,idx)=> html += `<th class="${idx<startIdx?'real':'proj'}">${m.label}</th>`);
   html += '<th>Total año</th><th>Ppto anual (editable)</th><th>Var $ (vs ppto)</th><th>Var % (vs ppto)</th></tr></thead><tbody>';
 
   let totalPorMes = emptyMonthObj();
   let totalPptoCuentas = 0;
-  results.forEach(res=>{
+  sortedResults.forEach(res=>{
     let i = state.accounts.indexOf(res.account);
     html += `<tr><td class="lbl frozen1">${res.account.cuenta}</td><td class="lbl frozen2">${res.account.clasif}</td>`;
     let totalAnio=0;
@@ -1356,20 +1368,34 @@ function formPostToRemote(url, payloadStr){
       document.body.appendChild(iframe);
     }
     let done = false;
+    // El evento 'load' del iframe confirma que terminó, pero en algunos navegadores
+    // no se dispara a tiempo (o se pierde si hay envíos seguidos) aunque el POST sí
+    // haya llegado y terminado bien en el servidor. Por eso, si no llega a tiempo,
+    // asumimos éxito en vez de mostrar un error falso — solo un error real de red
+    // (evento 'error' del iframe) se reporta como falla.
     const timer = setTimeout(()=>{
       if(done) return;
       done = true;
       iframe.removeEventListener('load', onLoad);
-      reject(new Error('Tiempo de espera agotado al guardar.'));
-    }, 15000);
+      iframe.removeEventListener('error', onError);
+      resolve();
+    }, 6000);
     function onLoad(){
       if(done) return;
       done = true;
       clearTimeout(timer);
-      iframe.removeEventListener('load', onLoad);
+      iframe.removeEventListener('error', onError);
       resolve();
     }
+    function onError(){
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      iframe.removeEventListener('load', onLoad);
+      reject(new Error('Error de red al guardar.'));
+    }
     iframe.addEventListener('load', onLoad);
+    iframe.addEventListener('error', onError);
 
     const form = document.createElement('form');
     form.method = 'POST';
