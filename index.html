@@ -1176,12 +1176,17 @@ function renderForecast(){
 
   let totalPorMes = emptyMonthObj();
   let totalPptoCuentas = 0;
+  let totalCargas = 0;
   sortedResults.forEach(res=>{
     let i = state.accounts.indexOf(res.account);
-    html += `<tr><td class="lbl frozen1">${res.account.cuenta}</td><td class="lbl frozen2">${res.account.clasif}</td>`;
+    const isRemun = res.account.driver === 'dotacion_remun';
+    const mergeCargas = isRemun && state.includeCargas;
+    const tooltip = mergeCargas ? ` title="Incluye cargas patronales (SIS+Mutual+AFC) sumadas desde ${MONTHS[startIdx].label}"` : '';
+    html += `<tr><td class="lbl frozen1"${tooltip}>${res.account.cuenta}${mergeCargas?' <span class="mini">(+cargas)</span>':''}</td><td class="lbl frozen2">${res.account.clasif}</td>`;
     let totalAnio=0;
     MONTHS.forEach((m,idx)=>{
       let v = res.values[m.key]||0;
+      if(mergeCargas && cargasPorMes[m.key]!=null){ v += cargasPorMes[m.key]; totalCargas += cargasPorMes[m.key]; }
       totalAnio += v;
       totalPorMes[m.key] = (totalPorMes[m.key]||0)+v;
       html += `<td class="${idx<startIdx?'real':'proj'}">${fmt(v)}</td>`;
@@ -1197,16 +1202,6 @@ function renderForecast(){
     html += `<td class="varcell ${varClass}">${varPct===null?'-':fmtPct(varPct)}</td>`;
     html += `</tr>`;
   });
-
-  // fila cargas adicionales
-  html += `<tr class="totalrow"><td class="lbl frozen1">Cargas adicionales patronales (SIS+Mutual+AFC)</td><td class="lbl frozen2">Referencial</td>`;
-  let totalCargas=0;
-  MONTHS.forEach((m,idx)=>{
-    let v = cargasPorMes[m.key];
-    if(v===null){ html += `<td class="real">-</td>`; }
-    else { totalCargas += v; html += `<td class="proj">${fmt(v)}</td>`; if(state.includeCargas) totalPorMes[m.key]=(totalPorMes[m.key]||0)+v; }
-  });
-  html += `<td><b>${fmt(totalCargas)}</b></td><td>-</td><td>-</td><td>-</td></tr>`;
 
   // fila total general (comparada contra el "Presupuesto total mensual" del grupo 3.1)
   html += `<tr class="grandrow"><td class="lbl frozen1">TOTAL GASTO 3.1${state.includeCargas?' (incl. cargas patronales)':''}</td><td class="lbl frozen2"></td>`;
@@ -1242,7 +1237,7 @@ function renderForecast(){
     <div class="kpi"><div class="v">${fmtK(granTotal)}</div><div class="l">Total estimado cierre 2026</div></div>
     <div class="kpi"><div class="v">${state.payroll.headcount + state.altas.length - state.bajas.length}</div><div class="l">Dotación estimada a Dic-26 (libro ${state.payroll.month?MONTHS.find(m=>m.key===state.payroll.month).label:''} ${state.altas.length?'+'+state.altas.length+' altas':''} ${state.bajas.length?'-'+state.bajas.length+' bajas':''})</div></div>
   `;
-  document.getElementById('forecastNote').innerHTML = `Proyección calculada desde <b>${MONTHS[startIdx].label}</b> en adelante. Los meses anteriores muestran los valores reales ingresados en la pestaña 1. ${state.payroll.headcount===0?'<b>Atención:</b> no has cargado el libro de remuneraciones; las cuentas de Remuneraciones/Horas Extras/Gratificaciones se proyectarán en $0 hasta que lo cargues.':''}`;
+  document.getElementById('forecastNote').innerHTML = `Proyección calculada desde <b>${MONTHS[startIdx].label}</b> en adelante. Los meses anteriores muestran los valores reales ingresados en la pestaña 1. ${state.includeCargas? 'Las cargas patronales (SIS+Mutual+AFC), por '+fmt(totalCargas)+' en el año, están sumadas dentro de la fila Remuneraciones.' : ''} ${state.payroll.headcount===0?'<b>Atención:</b> no has cargado el libro de remuneraciones; las cuentas de Remuneraciones/Horas Extras/Gratificaciones se proyectarán en $0 hasta que lo cargues.':''}`;
 
   // presupuesto mensual real para el gráfico: viene del "Presupuesto total mensual" del grupo 3.1.
   const monthlyBudget = emptyMonthObj();
